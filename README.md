@@ -1,3 +1,12 @@
+---
+title: JobSonar
+emoji: 📡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # JobSonar
 
 > 다양한 취업 플랫폼에 올라오는 데이터 관련 직군의 공고들을 모아서 보여주는 기능을 제공합니다.
