@@ -1,4 +1,4 @@
-name: Weekly Job Crawl
+name: Job Crawl
 
 on:
   schedule:
