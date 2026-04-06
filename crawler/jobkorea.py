@@ -38,6 +38,23 @@ def _parse_experience_jk(text: str | None) -> tuple[int | None, int | None]:
     return None, None
 
 
+def _normalize_employment_jk(text: str | None) -> str | None:
+    if not text:
+        return None
+    t = text.strip()
+    if t in ("정규직",):
+        return "정규직"
+    if t in ("계약직", "기간제"):
+        return "계약직"
+    if t in ("인턴",):
+        return "인턴"
+    if t in ("아르바이트",):
+        return "아르바이트"
+    if t in ("프리랜서",):
+        return "프리랜서"
+    return None
+
+
 def _parse_deadline_jk(text: str | None) -> date | None:
     """'05/01(금) 마감', '상시채용' 파싱."""
     if not text or "상시" in text or "채용" in text:
@@ -153,14 +170,26 @@ class JobKoreaCrawler(BaseCrawler):
             # 스킬: 제목에서 추출
             skills = [normalize_skill(s) for s in extract_skills_from_text(title)]
 
-            # 업종: 업종 관련 span 탐색
+            # 업종·근무형태: span 탐색
             industry = None
+            employment_type = None
             for span in card.find_all("span"):
+                cls = " ".join(span.get("class", []))
                 txt = span.get_text(strip=True)
-                if span.get("class") and any("industry" in c or "sector" in c or "업종" in c
-                                              for c in span.get("class", [])):
-                    industry = txt or None
-                    break
+                if not txt:
+                    continue
+                if any(k in cls for k in ["industry", "sector", "업종"]):
+                    industry = txt
+                if any(k in cls for k in ["employment", "jobtype", "고용"]):
+                    employment_type = _normalize_employment_jk(txt)
+            # 근무형태가 없으면 spans 텍스트에서 패턴 매칭
+            if not employment_type:
+                for s in card.find_all("span"):
+                    t = s.get_text(strip=True)
+                    emp = _normalize_employment_jk(t)
+                    if emp:
+                        employment_type = emp
+                        break
 
             return JobItem(
                 source_site="jobkorea",
@@ -170,6 +199,7 @@ class JobKoreaCrawler(BaseCrawler):
                 company_name=company,
                 job_category=category,
                 industry=industry,
+                employment_type=employment_type,
                 skills=skills,
                 location=location,
                 experience_min=exp_min,

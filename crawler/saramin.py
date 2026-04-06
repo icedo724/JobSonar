@@ -101,9 +101,11 @@ class SaraminCrawler(BaseCrawler):
 
             # span 순서: [지역, 경력, 학력, 고용형태]
             conditions = item.select(".job_condition span")
-            location = conditions[0].get_text(strip=True) if len(conditions) > 0 else None
-            exp_str  = conditions[1].get_text(strip=True) if len(conditions) > 1 else None
+            location     = conditions[0].get_text(strip=True) if len(conditions) > 0 else None
+            exp_str      = conditions[1].get_text(strip=True) if len(conditions) > 1 else None
             exp_min, exp_max = self._parse_experience(exp_str)
+            emp_raw      = conditions[3].get_text(strip=True) if len(conditions) > 3 else None
+            employment_type = self._normalize_employment(emp_raw)
 
             salary_el = item.select_one(".salary")
             sal_min, sal_max = _parse_salary_saramin(
@@ -137,6 +139,7 @@ class SaraminCrawler(BaseCrawler):
                 company_name=company,
                 job_category=category,
                 industry=industry,
+                employment_type=employment_type,
                 skills=skills,
                 location=location,
                 experience_min=exp_min,
@@ -148,6 +151,23 @@ class SaraminCrawler(BaseCrawler):
         except Exception as e:
             logger.warning(f"[saramin] 파싱 실패: {e}")
             return None
+
+    @staticmethod
+    def _normalize_employment(text: str | None) -> str | None:
+        if not text:
+            return None
+        t = text.strip()
+        if "정규" in t:
+            return "정규직"
+        if "계약" in t or "기간제" in t:
+            return "계약직"
+        if "인턴" in t:
+            return "인턴"
+        if "아르바이트" in t or "파트" in t:
+            return "아르바이트"
+        if "프리랜서" in t:
+            return "프리랜서"
+        return t or None
 
     @staticmethod
     def _parse_experience(exp_str: str | None) -> tuple[int | None, int | None]:

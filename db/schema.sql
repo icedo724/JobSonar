@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     company_name    TEXT    NOT NULL,
     job_category    TEXT,                       -- '데이터 엔지니어' | '데이터 분석가' 등
     industry        TEXT,                       -- 회사 업종 (원티드: API, 사람인/잡코리아: HTML)
+    employment_type TEXT,                       -- '정규직' | '계약직' | '인턴' 등
     location        TEXT,                       -- '서울' | '판교' 등
     experience_min  INTEGER,                    -- 최소 경력 (년)
     experience_max  INTEGER,                    -- 최대 경력 (년), NULL = 무관

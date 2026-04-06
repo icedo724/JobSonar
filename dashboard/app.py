@@ -66,10 +66,13 @@ ALL_INDUSTRIES = sorted(
     JOBS_DF["industry"].dropna().unique().tolist()
 ) if "industry" in JOBS_DF.columns else []
 
+EMP_TYPES = ["정규직", "계약직", "인턴"]
+
 # ── 헬퍼 ─────────────────────────────────────────────────────────
 
 def apply_filter(df: pd.DataFrame, categories: list, sources: list,
-                 industries: list | None = None) -> pd.DataFrame:
+                 industries: list | None = None,
+                 emp_types: list | None = None) -> pd.DataFrame:
     if df.empty:
         return df
     mask = pd.Series(True, index=df.index)
@@ -79,6 +82,8 @@ def apply_filter(df: pd.DataFrame, categories: list, sources: list,
         mask &= df["source_site"].isin(sources)
     if industries and "industry" in df.columns:
         mask &= df["industry"].isin(industries)
+    if emp_types and "employment_type" in df.columns:
+        mask &= df["employment_type"].isin(emp_types)
     return df[mask]
 
 
@@ -174,9 +179,8 @@ app.layout = html.Div([
     # 사이드바
     html.Div([
         html.Div([
-            html.Span("📡", style={"fontSize": "1.4rem"}),
-            html.Span("JobSonar", style={"fontSize": "1.2rem", "fontWeight": 800, "marginLeft": "8px"}),
-        ], style={"display": "flex", "alignItems": "center", "marginBottom": "4px"}),
+            html.Span("JobSonar", style={"fontSize": "1.15rem", "fontWeight": 800, "color": "#1352f1"}),
+        ], style={"marginBottom": "4px"}),
         html.P("한국 IT 채용 시장 트렌드", className="sidebar-sub"),
 
         html.Hr(className="sidebar-hr"),
@@ -185,9 +189,9 @@ app.layout = html.Div([
             id="filter-categories",
             options=[{"label": c, "value": c} for c in ALL_CATEGORIES],
             value=ALL_CATEGORIES,
-            className="filter-checklist",
-            labelStyle={"display": "flex", "alignItems": "center",
-                        "gap": "6px", "marginBottom": "5px", "fontSize": "0.85rem"},
+            className="pill-checklist",
+            inputStyle={"display": "none"},
+            labelStyle={"display": "inline-block"},
         ),
 
         html.Hr(className="sidebar-hr"),
@@ -200,9 +204,20 @@ app.layout = html.Div([
                 {"label": "잡코리아", "value": "jobkorea"},
             ],
             value=ALL_SOURCES,
-            className="filter-checklist",
-            labelStyle={"display": "flex", "alignItems": "center",
-                        "gap": "6px", "marginBottom": "5px", "fontSize": "0.85rem"},
+            className="pill-checklist",
+            inputStyle={"display": "none"},
+            labelStyle={"display": "inline-block"},
+        ),
+
+        html.Hr(className="sidebar-hr"),
+        html.Label("근무형태", className="filter-label"),
+        dcc.Checklist(
+            id="filter-emp-type",
+            options=[{"label": e, "value": e} for e in EMP_TYPES],
+            value=[],
+            className="pill-checklist",
+            inputStyle={"display": "none"},
+            labelStyle={"display": "inline-block"},
         ),
 
         html.Hr(className="sidebar-hr"),
@@ -228,7 +243,7 @@ app.layout = html.Div([
     html.Div([
         # 헤더 배너
         html.Div([
-            html.H1("📡 JobSonar"),
+            html.H1("JobSonar"),
             html.P("한국 IT 채용 시장 트렌드 분석 · 원티드 · 사람인 · 잡코리아"),
         ], className="header-banner"),
 
@@ -239,10 +254,10 @@ app.layout = html.Div([
         dcc.Tabs(id="main-tabs", value="board", className="tabs-container", children=[
 
             # ── 공고 목록 ─────────────────────────────────────────
-            dcc.Tab(label="📋 공고 목록", value="board", style=_TAB, selected_style=_TAB_SEL, children=[
+            dcc.Tab(label="공고 목록", value="board", style=_TAB, selected_style=_TAB_SEL, children=[
                 html.Div([
                     html.Div([
-                        dcc.Input(id="board-search", placeholder="🔍  공고명 / 회사명 / 기술스택",
+                        dcc.Input(id="board-search", placeholder="공고명 / 회사명 / 기술스택",
                                   type="text", debounce=True, className="search-input"),
                         dcc.Dropdown(id="board-location", placeholder="지역", clearable=True,
                                      className="filter-dropdown"),
@@ -262,12 +277,12 @@ app.layout = html.Div([
             ]),
 
             # ── 트렌드 ────────────────────────────────────────────
-            dcc.Tab(label="📈 트렌드", value="trend", style=_TAB, selected_style=_TAB_SEL, children=[
+            dcc.Tab(label="트렌드", value="trend", style=_TAB, selected_style=_TAB_SEL, children=[
                 html.Div(id="trend-content", className="tab-inner"),
             ]),
 
             # ── 기술 스택 ─────────────────────────────────────────
-            dcc.Tab(label="🔧 기술 스택", value="skills", style=_TAB, selected_style=_TAB_SEL, children=[
+            dcc.Tab(label="기술 스택", value="skills", style=_TAB, selected_style=_TAB_SEL, children=[
                 html.Div([
                     html.Div([
                         # 좌: TOP N 바 차트
@@ -293,7 +308,7 @@ app.layout = html.Div([
             ]),
 
             # ── 스킬 네트워크 ─────────────────────────────────────
-            dcc.Tab(label="🕸️ 스킬 네트워크", value="network", style=_TAB, selected_style=_TAB_SEL, children=[
+            dcc.Tab(label="스킬 네트워크", value="network", style=_TAB, selected_style=_TAB_SEL, children=[
                 html.Div([
                     html.Div([
                         dcc.Dropdown(id="net-category", placeholder="직군 (전체)", clearable=True,
@@ -314,12 +329,12 @@ app.layout = html.Div([
             ]),
 
             # ── 연봉 분석 ─────────────────────────────────────────
-            dcc.Tab(label="💰 연봉 분석", value="salary", style=_TAB, selected_style=_TAB_SEL, children=[
+            dcc.Tab(label="연봉 분석", value="salary", style=_TAB, selected_style=_TAB_SEL, children=[
                 html.Div(id="salary-content", className="tab-inner"),
             ]),
 
             # ── 기업 분석 ─────────────────────────────────────────
-            dcc.Tab(label="🏢 기업 분석", value="company", style=_TAB, selected_style=_TAB_SEL, children=[
+            dcc.Tab(label="기업 분석", value="company", style=_TAB, selected_style=_TAB_SEL, children=[
                 html.Div([
                     html.Div([
                         html.Div([
@@ -351,9 +366,10 @@ app.layout = html.Div([
 @app.callback(Output("sidebar-metrics", "children"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
-              Input("filter-industry", "value"))
-def update_sidebar(categories, sources, industries):
-    df = apply_filter(JOBS_DF, categories, sources, industries)
+              Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"))
+def update_sidebar(categories, sources, industries, emp_types):
+    df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
     new7 = new_jobs_count(df, days=7)
     last = df["collected_at"].max().strftime("%Y-%m-%d") if not df.empty else "—"
     return [
@@ -370,9 +386,10 @@ def update_sidebar(categories, sources, industries):
 @app.callback(Output("kpi-row", "children"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
-              Input("filter-industry", "value"))
-def update_kpis(categories, sources, industries):
-    df = apply_filter(JOBS_DF, categories, sources, industries)
+              Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"))
+def update_kpis(categories, sources, industries, emp_types):
+    df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
     sf = apply_filter(SKILLS_DF, categories, sources)
     new7 = new_jobs_count(df, days=7)
 
@@ -396,9 +413,10 @@ def update_kpis(categories, sources, industries):
 @app.callback(Output("board-location", "options"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
-              Input("filter-industry", "value"))
-def update_location_options(categories, sources, industries):
-    df = apply_filter(BOARD_DF, categories, sources, industries)
+              Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"))
+def update_location_options(categories, sources, industries, emp_types):
+    df = apply_filter(BOARD_DF, categories, sources, industries, emp_types)
     locs = sorted({normalize_location(l) for l in df["location"].dropna()} - {""})
     return [{"label": l, "value": l} for l in locs]
 
@@ -412,13 +430,13 @@ def update_location_options(categories, sources, industries):
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
               Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"),
               State("board-page", "data"))
-def update_page(prev, nxt, search, location, exp, categories, sources, industries, current):
-    # 필터 변경 시 1페이지로 리셋
+def update_page(prev, nxt, search, location, exp, categories, sources, industries, emp_types, current):
     from dash import ctx
     trigger = ctx.triggered_id
     if trigger in ("board-search", "board-location", "board-exp",
-                   "filter-categories", "filter-sources", "filter-industry"):
+                   "filter-categories", "filter-sources", "filter-industry", "filter-emp-type"):
         return 1
     if trigger == "board-prev":
         return max(1, current - 1)
@@ -433,15 +451,16 @@ def update_page(prev, nxt, search, location, exp, categories, sources, industrie
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
               Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"),
               Input("board-search", "value"),
               Input("board-location", "value"),
               Input("board-exp", "value"),
               Input("board-page", "data"))
-def update_board(categories, sources, industries, keyword, location, exp, page):
+def update_board(categories, sources, industries, emp_types, keyword, location, exp, page):
     PAGE_SIZE = 20
     if not categories or not sources:
         return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1"
-    df = apply_filter(BOARD_DF, categories, sources, industries)
+    df = apply_filter(BOARD_DF, categories, sources, industries, emp_types)
 
     if keyword:
         kw = keyword.lower()
@@ -508,9 +527,10 @@ def update_board(categories, sources, industries, keyword, location, exp, page):
 @app.callback(Output("trend-content", "children"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
-              Input("filter-industry", "value"))
-def update_trend(categories, sources, industries):
-    df = apply_filter(JOBS_DF, categories, sources, industries)
+              Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"))
+def update_trend(categories, sources, industries, emp_types):
+    df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
     sf = apply_filter(SKILLS_DF, categories, sources)
 
     # 주별 추이
@@ -719,9 +739,10 @@ def update_salary(categories, sources):
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
               Input("filter-industry", "value"),
+              Input("filter-emp-type", "value"),
               Input("company-top-n", "value"))
-def update_company(categories, sources, industries, top_n):
-    df = apply_filter(JOBS_DF, categories, sources, industries)
+def update_company(categories, sources, industries, emp_types, top_n):
+    df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
     co_df = company_rankings(df, top_n=top_n or 20)
     loc_df = location_distribution(df)
 

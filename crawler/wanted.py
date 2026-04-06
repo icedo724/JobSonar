@@ -158,6 +158,15 @@ class WantedCrawler(BaseCrawler):
 
             industry = raw.get("company", {}).get("industry_name") or None
 
+            # 원티드: contract_type 또는 employment_type 필드
+            _emp_raw = (raw.get("contract_type") or
+                        raw.get("employment_type_tags", [{}])[0].get("name") if
+                        raw.get("employment_type_tags") else None)
+            emp_map = {"정규직": "정규직", "계약직": "계약직", "인턴": "인턴",
+                       "full_time": "정규직", "contract": "계약직", "intern": "인턴"}
+            employment_type = emp_map.get(str(_emp_raw or "").lower()) or (
+                "정규직" if not _emp_raw else str(_emp_raw))
+
             return JobItem(
                 source_site="wanted",
                 source_id=job_id,
@@ -166,6 +175,7 @@ class WantedCrawler(BaseCrawler):
                 company_name=company,
                 job_category=category,
                 industry=industry,
+                employment_type=employment_type,
                 skills=skill_tags,
                 location=location,
                 experience_min=exp_min,

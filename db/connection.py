@@ -19,6 +19,8 @@ def init_db(db_path: Path = DB_PATH) -> None:
             conn.execute("ALTER TABLE jobs ADD COLUMN is_duplicate BOOLEAN NOT NULL DEFAULT 0")
         if "industry" not in cols:
             conn.execute("ALTER TABLE jobs ADD COLUMN industry TEXT")
+        if "employment_type" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN employment_type TEXT")
         conn.commit()
 
 
@@ -69,15 +71,16 @@ def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:
             """
             INSERT INTO jobs (
                 source_site, source_id, url, title, company_name, job_category,
-                industry, location, experience_min, experience_max,
+                industry, employment_type, location, experience_min, experience_max,
                 salary_min, salary_max, posted_date, deadline_date, is_duplicate
             ) VALUES (
                 :source_site, :source_id, :url, :title, :company_name, :job_category,
-                :industry, :location, :experience_min, :experience_max,
+                :industry, :employment_type, :location, :experience_min, :experience_max,
                 :salary_min, :salary_max, :posted_date, :deadline_date, :is_duplicate
             )
             """,
-            {**job, "is_duplicate": int(is_dup), "industry": job.get("industry")},
+            {**job, "is_duplicate": int(is_dup),
+             "industry": job.get("industry"), "employment_type": job.get("employment_type")},
         )
         return cur.lastrowid, "inserted"
 
@@ -85,11 +88,12 @@ def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:
         """
         UPDATE jobs
         SET title=:title, company_name=:company_name, is_active=1,
-            industry=:industry, salary_min=:salary_min, salary_max=:salary_max,
+            industry=:industry, employment_type=:employment_type,
+            salary_min=:salary_min, salary_max=:salary_max,
             deadline_date=:deadline_date, updated_at=CURRENT_TIMESTAMP
         WHERE source_site=:source_site AND source_id=:source_id
         """,
-        {**job, "industry": job.get("industry")},
+        {**job, "industry": job.get("industry"), "employment_type": job.get("employment_type")},
     )
     return existing["id"], "updated"
 
