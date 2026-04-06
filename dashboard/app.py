@@ -112,6 +112,19 @@ def source_badge(source: str):
     })
 
 
+_REGIONS = ["서울", "경기", "인천", "부산", "대구", "대전", "광주", "울산", "세종",
+            "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
+
+def normalize_location(loc) -> str:
+    if not loc or (isinstance(loc, float) and pd.isna(loc)):
+        return ""
+    s = str(loc)
+    for r in _REGIONS:
+        if s.startswith(r) or r in s:
+            return r
+    return "해외"
+
+
 def exp_label(mn, mx) -> str:
     if mn is None or (isinstance(mn, float) and pd.isna(mn)):
         return "경력무관"
@@ -363,7 +376,7 @@ def update_kpis(categories, sources):
               Input("filter-sources", "value"))
 def update_location_options(categories, sources):
     df = apply_filter(BOARD_DF, categories, sources)
-    locs = sorted(df["location"].dropna().unique().tolist())
+    locs = sorted({normalize_location(l) for l in df["location"].dropna()} - {""})
     return [{"label": l, "value": l} for l in locs]
 
 
@@ -413,7 +426,7 @@ def update_board(categories, sources, keyword, location, exp, page):
             df["skills"].fillna("").str.lower().str.contains(kw, na=False)
         ]
     if location:
-        df = df[df["location"].str.contains(location, na=False)]
+        df = df[df["location"].apply(normalize_location) == location]
     if exp:
         exp_map = {"신입": (0, 0), "1-3년": (1, 3), "3-5년": (3, 5), "5년+": (5, 99)}
         lo, hi = exp_map[exp]
@@ -441,7 +454,7 @@ def update_board(categories, sources, keyword, location, exp, page):
         def _s(v):
             return str(v) if pd.notna(v) and v != "" else ""
         meta = " · ".join(filter(None, [
-            _s(row.get("location")),
+            normalize_location(row.get("location")) or "",
             exp_label(row.get("experience_min"), row.get("experience_max")),
             salary_label(row.get("salary_min"), row.get("salary_max")),
         ]))
