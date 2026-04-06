@@ -61,9 +61,42 @@ ALL_CATEGORIES = sorted(JOBS_DF["job_category"].dropna().unique().tolist())
 ALL_SOURCES    = ["wanted", "saramin", "jobkorea"]
 HAS_DATA       = len(JOBS_DF) > 0
 
+# ── 업종 분류 ────────────────────────────────────────────────────
+_INDUSTRY_RULES = [
+    ("게임",       ["게임", "game", "gaming", "넥슨", "크래프톤", "넷마블", "엔씨", "펄어비스", "컴투스", "위메이드"]),
+    ("메디컬",     ["의료", "병원", "헬스", "메디", "medical", "health", "pharma", "제약", "바이오", "clinc", "clinic", "의약"]),
+    ("금융/핀테크",["금융", "은행", "증권", "보험", "카드", "핀테크", "fintech", "토스", "카카오페이", "뱅크", "페이", "투자", "자산"]),
+    ("이커머스",   ["쇼핑", "커머스", "commerce", "유통", "물류", "배달", "쿠팡", "배민", "마켓", "셀러", "리테일"]),
+    ("교육/에듀텍",["교육", "에듀", "학원", "학교", "edtech", "러닝", "과외", "클래스"]),
+    ("미디어/광고",["미디어", "방송", "광고", "콘텐츠", "contents", "media", "엔터", "entertainment", "OTT", "스트리밍"]),
+    ("제조/반도체",["제조", "반도체", "전자", "자동차", "화학", "소재", "부품", "samsung", "삼성", "lg", "sk하이닉스"]),
+    ("공공/스타트업",["스타트업", "startup", "벤처", "공공", "공기업", "정부", "솔루션"]),
+]
+
+def classify_industry(company: str, title: str) -> str:
+    text = f"{company or ''} {title or ''}".lower()
+    for industry, keywords in _INDUSTRY_RULES:
+        if any(kw.lower() in text for kw in keywords):
+            return industry
+    return "IT/기타"
+
+def add_industry_col(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    df = df.copy()
+    df["industry"] = df.apply(
+        lambda r: classify_industry(r.get("company_name", ""), r.get("title", "")), axis=1
+    )
+    return df
+
+JOBS_DF  = add_industry_col(JOBS_DF)
+BOARD_DF = add_industry_col(BOARD_DF)
+ALL_INDUSTRIES = sorted(JOBS_DF["industry"].unique().tolist())
+
 # ── 헬퍼 ─────────────────────────────────────────────────────────
 
-def apply_filter(df: pd.DataFrame, categories: list, sources: list) -> pd.DataFrame:
+def apply_filter(df: pd.DataFrame, categories: list, sources: list,
+                 industries: list | None = None) -> pd.DataFrame:
     if df.empty:
         return df
     mask = pd.Series(True, index=df.index)
@@ -71,6 +104,8 @@ def apply_filter(df: pd.DataFrame, categories: list, sources: list) -> pd.DataFr
         mask &= df["job_category"].isin(categories)
     if sources and "source_site" in df.columns:
         mask &= df["source_site"].isin(sources)
+    if industries and "industry" in df.columns:
+        mask &= df["industry"].isin(industries)
     return df[mask]
 
 
@@ -195,6 +230,18 @@ app.layout = html.Div([
             className="filter-checklist",
             labelStyle={"display": "flex", "alignItems": "center",
                         "gap": "6px", "marginBottom": "5px", "fontSize": "0.85rem"},
+        ),
+
+        html.Hr(className="sidebar-hr"),
+        html.Label("업종", className="filter-label"),
+        dcc.Dropdown(
+            id="filter-industry",
+            options=[{"label": i, "value": i} for i in ALL_INDUSTRIES],
+            placeholder="전체 업종",
+            multi=True,
+            clearable=True,
+            className="filter-dropdown",
+            style={"fontSize": "0.82rem"},
         ),
 
         html.Hr(className="sidebar-hr"),
@@ -330,9 +377,10 @@ app.layout = html.Div([
 
 @app.callback(Output("sidebar-metrics", "children"),
               Input("filter-categories", "value"),
-              Input("filter-sources", "value"))
-def update_sidebar(categories, sources):
-    df = apply_filter(JOBS_DF, categories, sources)
+              Input("filter-sources", "value"),
+              Input("filter-industry", "value"))
+def update_sidebar(categories, sources, industries):
+    df = apply_filter(JOBS_DF, categories, sources, industries)
     new7 = new_jobs_count(df, days=7)
     last = df["collected_at"].max().strftime("%Y-%m-%d") if not df.empty else "—"
     return [
@@ -348,9 +396,10 @@ def update_sidebar(categories, sources):
 
 @app.callback(Output("kpi-row", "children"),
               Input("filter-categories", "value"),
-              Input("filter-sources", "value"))
-def update_kpis(categories, sources):
-    df = apply_filter(JOBS_DF, categories, sources)
+              Input("filter-sources", "value"),
+              Input("filter-industry", "value"))
+def update_kpis(categories, sources, industries):
+    df = apply_filter(JOBS_DF, categories, sources, industries)
     sf = apply_filter(SKILLS_DF, categories, sources)
     new7 = new_jobs_count(df, days=7)
 
@@ -373,9 +422,10 @@ def update_kpis(categories, sources):
 
 @app.callback(Output("board-location", "options"),
               Input("filter-categories", "value"),
-              Input("filter-sources", "value"))
-def update_location_options(categories, sources):
-    df = apply_filter(BOARD_DF, categories, sources)
+              Input("filter-sources", "value"),
+              Input("filter-industry", "value"))
+def update_location_options(categories, sources, industries):
+    df = apply_filter(BOARD_DF, categories, sources, industries)
     locs = sorted({normalize_location(l) for l in df["location"].dropna()} - {""})
     return [{"label": l, "value": l} for l in locs]
 
@@ -388,13 +438,14 @@ def update_location_options(categories, sources):
               Input("board-exp", "value"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
+              Input("filter-industry", "value"),
               State("board-page", "data"))
-def update_page(prev, nxt, search, location, exp, categories, sources, current):
+def update_page(prev, nxt, search, location, exp, categories, sources, industries, current):
     # 필터 변경 시 1페이지로 리셋
     from dash import ctx
     trigger = ctx.triggered_id
     if trigger in ("board-search", "board-location", "board-exp",
-                   "filter-categories", "filter-sources"):
+                   "filter-categories", "filter-sources", "filter-industry"):
         return 1
     if trigger == "board-prev":
         return max(1, current - 1)
@@ -408,15 +459,16 @@ def update_page(prev, nxt, search, location, exp, categories, sources, current):
               Output("board-page-info", "children"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
+              Input("filter-industry", "value"),
               Input("board-search", "value"),
               Input("board-location", "value"),
               Input("board-exp", "value"),
               Input("board-page", "data"))
-def update_board(categories, sources, keyword, location, exp, page):
+def update_board(categories, sources, industries, keyword, location, exp, page):
     PAGE_SIZE = 20
     if not categories or not sources:
         return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1"
-    df = apply_filter(BOARD_DF, categories, sources)
+    df = apply_filter(BOARD_DF, categories, sources, industries)
 
     if keyword:
         kw = keyword.lower()
@@ -482,9 +534,10 @@ def update_board(categories, sources, keyword, location, exp, page):
 
 @app.callback(Output("trend-content", "children"),
               Input("filter-categories", "value"),
-              Input("filter-sources", "value"))
-def update_trend(categories, sources):
-    df = apply_filter(JOBS_DF, categories, sources)
+              Input("filter-sources", "value"),
+              Input("filter-industry", "value"))
+def update_trend(categories, sources, industries):
+    df = apply_filter(JOBS_DF, categories, sources, industries)
     sf = apply_filter(SKILLS_DF, categories, sources)
 
     # 주별 추이
@@ -692,9 +745,10 @@ def update_salary(categories, sources):
               Output("location-heatmap", "figure"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
+              Input("filter-industry", "value"),
               Input("company-top-n", "value"))
-def update_company(categories, sources, top_n):
-    df = apply_filter(JOBS_DF, categories, sources)
+def update_company(categories, sources, industries, top_n):
+    df = apply_filter(JOBS_DF, categories, sources, industries)
     co_df = company_rankings(df, top_n=top_n or 20)
     loc_df = location_distribution(df)
 
