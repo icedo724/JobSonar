@@ -117,9 +117,15 @@ class SaraminCrawler(BaseCrawler):
                 deadline_el.get_text(strip=True) if deadline_el else None
             )
 
-            # 사람인은 별도 스킬 태그 없음 → 섹터 텍스트에서 추출
+            # 사람인: sector 태그 + 제목 + 직무태그 전부 합쳐서 추출
+            skill_parts = [title]
             skill_area = item.select_one(".job_sector")
-            skill_text = skill_area.get_text(" ", strip=True) if skill_area else title
+            if skill_area:
+                skill_parts.append(skill_area.get_text(" ", strip=True))
+            # 추가 태그 영역
+            for tag_el in item.select(".job_tag, .tag_wrap, [class*='tag']"):
+                skill_parts.append(tag_el.get_text(" ", strip=True))
+            skill_text = " ".join(skill_parts)
             skills = [normalize_skill(s) for s in extract_skills_from_text(skill_text)]
 
             # 업종: .corp_sector 또는 company_info 섹션에서 파싱

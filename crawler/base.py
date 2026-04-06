@@ -21,27 +21,116 @@ TARGET_CATEGORIES = {
 
 # 정규화된 스킬 사전 (원문 → 표준명)
 SKILL_ALIASES: dict[str, str] = {
+    # 언어
     "python": "Python", "파이썬": "Python",
-    "sql": "SQL", "mysql": "MySQL", "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
-    "spark": "Apache Spark", "apache spark": "Apache Spark",
+    "r": "R",
+    "scala": "Scala",
+    "java": "Java", "자바": "Java",
+    "javascript": "JavaScript", "js": "JavaScript",
+    "typescript": "TypeScript", "ts": "TypeScript",
+    "go": "Go", "golang": "Go",
+    "c++": "C++", "cpp": "C++",
+    "c#": "C#",
+    "rust": "Rust",
+    "julia": "Julia",
+    "matlab": "MATLAB",
+
+    # DB / SQL
+    "sql": "SQL",
+    "mysql": "MySQL",
+    "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
+    "oracle": "Oracle",
+    "mssql": "MSSQL", "sql server": "MSSQL",
+    "sqlite": "SQLite",
+    "mongodb": "MongoDB", "mongo": "MongoDB",
+    "cassandra": "Cassandra",
+    "hbase": "HBase",
+    "neo4j": "Neo4j",
+    "dynamodb": "DynamoDB",
+    "redis": "Redis",
+    "hive": "Hive",
+    "presto": "Presto", "trino": "Trino",
+    "athena": "AWS Athena",
+
+    # 클라우드
+    "aws": "AWS", "amazon web services": "AWS",
+    "gcp": "GCP", "google cloud": "GCP", "google cloud platform": "GCP",
+    "azure": "Azure", "microsoft azure": "Azure",
+
+    # 빅데이터 / 파이프라인
+    "spark": "Apache Spark", "apache spark": "Apache Spark", "pyspark": "Apache Spark",
     "hadoop": "Hadoop",
     "airflow": "Apache Airflow", "apache airflow": "Apache Airflow",
     "kafka": "Apache Kafka", "apache kafka": "Apache Kafka",
-    "aws": "AWS", "amazon web services": "AWS",
-    "gcp": "GCP", "google cloud": "GCP",
-    "azure": "Azure",
-    "docker": "Docker", "kubernetes": "Kubernetes", "k8s": "Kubernetes",
-    "tensorflow": "TensorFlow", "pytorch": "PyTorch",
-    "scikit-learn": "scikit-learn", "sklearn": "scikit-learn",
-    "pandas": "pandas", "numpy": "NumPy",
-    "tableau": "Tableau", "power bi": "Power BI", "powerbi": "Power BI",
-    "looker": "Looker", "redash": "Redash", "superset": "Apache Superset",
+    "flink": "Apache Flink", "apache flink": "Apache Flink",
+    "nifi": "Apache NiFi",
+    "databricks": "Databricks",
     "dbt": "dbt", "data build tool": "dbt",
-    "r": "R", "scala": "Scala", "java": "Java",
-    "bigquery": "BigQuery", "redshift": "Redshift", "snowflake": "Snowflake",
-    "elasticsearch": "Elasticsearch", "kibana": "Kibana",
+    "luigi": "Luigi",
+    "celery": "Celery",
+
+    # 컨테이너 / 인프라
+    "docker": "Docker",
+    "kubernetes": "Kubernetes", "k8s": "Kubernetes",
+    "terraform": "Terraform",
+    "ansible": "Ansible",
+    "jenkins": "Jenkins",
+    "github actions": "GitHub Actions",
+    "gitlab ci": "GitLab CI",
     "git": "Git", "github": "Git", "gitlab": "Git",
-    "linux": "Linux",
+    "linux": "Linux", "ubuntu": "Linux",
+
+    # ML / DL 프레임워크
+    "tensorflow": "TensorFlow", "tf": "TensorFlow",
+    "pytorch": "PyTorch", "torch": "PyTorch",
+    "keras": "Keras",
+    "scikit-learn": "scikit-learn", "sklearn": "scikit-learn",
+    "xgboost": "XGBoost",
+    "lightgbm": "LightGBM",
+    "catboost": "CatBoost",
+    "hugging face": "Hugging Face", "huggingface": "Hugging Face",
+    "langchain": "LangChain",
+    "openai": "OpenAI API",
+    "llm": "LLM",
+    "rag": "RAG",
+    "mlflow": "MLflow",
+    "kubeflow": "Kubeflow",
+    "sagemaker": "SageMaker", "aws sagemaker": "SageMaker",
+    "vertex ai": "Vertex AI",
+
+    # 분석 / 시각화
+    "pandas": "pandas",
+    "numpy": "NumPy",
+    "scipy": "SciPy",
+    "matplotlib": "Matplotlib",
+    "seaborn": "Seaborn",
+    "plotly": "Plotly",
+    "tableau": "Tableau", "타블로": "Tableau",
+    "power bi": "Power BI", "powerbi": "Power BI",
+    "looker": "Looker", "looker studio": "Looker",
+    "redash": "Redash",
+    "superset": "Apache Superset", "apache superset": "Apache Superset",
+    "metabase": "Metabase",
+    "grafana": "Grafana",
+    "excel": "Excel", "엑셀": "Excel",
+
+    # 데이터 웨어하우스
+    "bigquery": "BigQuery", "bq": "BigQuery",
+    "redshift": "Redshift", "aws redshift": "Redshift",
+    "snowflake": "Snowflake",
+    "clickhouse": "ClickHouse",
+
+    # 검색 / 로그
+    "elasticsearch": "Elasticsearch", "elastic": "Elasticsearch",
+    "kibana": "Kibana",
+    "logstash": "Logstash",
+
+    # 협업 / 기타
+    "jira": "Jira",
+    "confluence": "Confluence",
+    "notion": "Notion",
+    "slack": "Slack",
+    "figma": "Figma",
 }
 
 

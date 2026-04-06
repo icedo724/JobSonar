@@ -167,8 +167,9 @@ class JobKoreaCrawler(BaseCrawler):
             )
             deadline_date = _parse_deadline_jk(deadline_span.get_text(strip=True) if deadline_span else None)
 
-            # 스킬: 제목에서 추출
-            skills = [normalize_skill(s) for s in extract_skills_from_text(title)]
+            # 스킬: 제목 + 카드 내 모든 텍스트에서 추출
+            card_text = title + " " + card.get_text(" ", strip=True)
+            skills = [normalize_skill(s) for s in extract_skills_from_text(card_text)]
 
             # 업종·근무형태: span 탐색
             industry = None
