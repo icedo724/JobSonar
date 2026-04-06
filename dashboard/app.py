@@ -113,17 +113,19 @@ def source_badge(source: str):
 
 
 def exp_label(mn, mx) -> str:
-    if mn is None:
+    if mn is None or (isinstance(mn, float) and pd.isna(mn)):
         return "경력무관"
+    mn, mx = int(mn), (int(mx) if mx is not None and not (isinstance(mx, float) and pd.isna(mx)) else None)
     if mn == 0 and mx == 0:
         return "신입"
     return f"{mn}~{mx}년" if mx else f"{mn}년 이상"
 
 
 def salary_label(mn, mx) -> str:
-    if mn is None:
+    if mn is None or (isinstance(mn, float) and pd.isna(mn)):
         return "연봉 협의"
-    return f"{int(mn):,}~{int(mx):,}만원" if mx else f"{int(mn):,}만원~"
+    mx_valid = mx is not None and not (isinstance(mx, float) and pd.isna(mx))
+    return f"{int(mn):,}~{int(mx):,}만원" if mx_valid else f"{int(mn):,}만원~"
 
 
 def empty_fig(msg="데이터 없음") -> go.Figure:
@@ -399,6 +401,8 @@ def update_page(prev, nxt, search, location, exp, categories, sources, current):
               Input("board-page", "data"))
 def update_board(categories, sources, keyword, location, exp, page):
     PAGE_SIZE = 20
+    if not categories or not sources:
+        return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1"
     df = apply_filter(BOARD_DF, categories, sources)
 
     if keyword:
@@ -434,8 +438,10 @@ def update_board(categories, sources, keyword, location, exp, page):
                 f"마감 {row['deadline_date'].strftime('%m/%d')}",
                 style={"color": "#e83e3e", "fontSize": "0.78rem", "fontWeight": 600},
             )
+        def _s(v):
+            return str(v) if pd.notna(v) and v != "" else ""
         meta = " · ".join(filter(None, [
-            row.get("location") or "",
+            _s(row.get("location")),
             exp_label(row.get("experience_min"), row.get("experience_max")),
             salary_label(row.get("salary_min"), row.get("salary_max")),
         ]))
