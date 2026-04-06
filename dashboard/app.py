@@ -262,7 +262,7 @@ app.layout = html.Div([
                         dcc.Dropdown(id="board-location", placeholder="지역", clearable=True,
                                      className="filter-dropdown"),
                         dcc.Dropdown(id="board-exp", placeholder="경력", clearable=True,
-                                     options=["신입", "1-3년", "3-5년", "5년+"],
+                                     options=["신입", "경력", "경력무관"],
                                      className="filter-dropdown"),
                     ], className="board-filters"),
                     html.P(id="board-count", className="board-count"),
@@ -472,9 +472,12 @@ def update_board(categories, sources, industries, emp_types, keyword, location, 
     if location:
         df = df[df["location"].apply(normalize_location) == location]
     if exp:
-        exp_map = {"신입": (0, 0), "1-3년": (1, 3), "3-5년": (3, 5), "5년+": (5, 99)}
-        lo, hi = exp_map[exp]
-        df = df[df["experience_min"].fillna(-1).between(lo, hi)]
+        if exp == "신입":
+            df = df[df["experience_min"].fillna(-1) == 0]
+        elif exp == "경력":
+            df = df[df["experience_min"].fillna(-1) > 0]
+        elif exp == "경력무관":
+            df = df[df["experience_min"].isna()]
 
     total = len(df)
     total_pages = max(1, math.ceil(total / PAGE_SIZE))
