@@ -264,6 +264,15 @@ app.layout = html.Div([
                         dcc.Dropdown(id="board-exp", placeholder="경력", clearable=True,
                                      options=["신입", "경력", "경력무관"],
                                      className="filter-dropdown"),
+                        dcc.Dropdown(id="board-sort", placeholder="정렬", clearable=False,
+                                     value="latest",
+                                     options=[
+                                         {"label": "최신순", "value": "latest"},
+                                         {"label": "경력 낮은순", "value": "exp_asc"},
+                                         {"label": "경력 높은순", "value": "exp_desc"},
+                                         {"label": "연봉 높은순", "value": "salary_desc"},
+                                     ],
+                                     className="filter-dropdown"),
                     ], className="board-filters"),
                     html.P(id="board-count", className="board-count"),
                     html.Div(id="board-cards"),
@@ -427,15 +436,16 @@ def update_location_options(categories, sources, industries, emp_types):
               Input("board-search", "value"),
               Input("board-location", "value"),
               Input("board-exp", "value"),
+              Input("board-sort", "value"),
               Input("filter-categories", "value"),
               Input("filter-sources", "value"),
               Input("filter-industry", "value"),
               Input("filter-emp-type", "value"),
               State("board-page", "data"))
-def update_page(prev, nxt, search, location, exp, categories, sources, industries, emp_types, current):
+def update_page(prev, nxt, search, location, exp, sort, categories, sources, industries, emp_types, current):
     from dash import ctx
     trigger = ctx.triggered_id
-    if trigger in ("board-search", "board-location", "board-exp",
+    if trigger in ("board-search", "board-location", "board-exp", "board-sort",
                    "filter-categories", "filter-sources", "filter-industry", "filter-emp-type"):
         return 1
     if trigger == "board-prev":
@@ -455,8 +465,9 @@ def update_page(prev, nxt, search, location, exp, categories, sources, industrie
               Input("board-search", "value"),
               Input("board-location", "value"),
               Input("board-exp", "value"),
+              Input("board-sort", "value"),
               Input("board-page", "data"))
-def update_board(categories, sources, industries, emp_types, keyword, location, exp, page):
+def update_board(categories, sources, industries, emp_types, keyword, location, exp, sort, page):
     PAGE_SIZE = 20
     if not categories or not sources:
         return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1"
@@ -478,6 +489,15 @@ def update_board(categories, sources, industries, emp_types, keyword, location, 
             df = df[df["experience_min"].fillna(-1) > 0]
         elif exp == "경력무관":
             df = df[df["experience_min"].isna()]
+
+    sort_map = {
+        "latest":      ("collected_at", False),
+        "exp_asc":     ("experience_min", True),
+        "exp_desc":    ("experience_min", False),
+        "salary_desc": ("salary_min", False),
+    }
+    col, asc = sort_map.get(sort or "latest", ("collected_at", False))
+    df = df.sort_values(col, ascending=asc, na_position="last")
 
     total = len(df)
     total_pages = max(1, math.ceil(total / PAGE_SIZE))
@@ -536,25 +556,44 @@ def update_trend(categories, sources, industries, emp_types):
     df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
     sf = apply_filter(SKILLS_DF, categories, sources)
 
-    # 주별 추이
+    # 주별 추이 (데이터 포인트 1개면 bar, 2개 이상이면 line)
     weekly = weekly_job_counts(df)
-    fig1 = chart_base(
-        px.line(weekly, x="week", y="count", color="job_category", markers=True,
-                labels={"week": "", "count": "공고 수", "job_category": "직군"},
-                color_discrete_sequence=PALETTE)
-        if not weekly.empty else empty_fig()
-    )
+    if not weekly.empty:
+        n_weeks = weekly["week"].nunique()
+        if n_weeks < 2:
+            _fig1 = px.bar(weekly, x="job_category", y="count", color="job_category",
+                           labels={"job_category": "직군", "count": "공고 수"},
+                           color_discrete_sequence=PALETTE,
+                           text="count")
+            _fig1.update_traces(textposition="outside")
+        else:
+            _fig1 = px.line(weekly, x="week", y="count", color="job_category", markers=True,
+                            labels={"week": "주", "count": "공고 수", "job_category": "직군"},
+                            color_discrete_sequence=PALETTE)
+        fig1 = chart_base(_fig1)
+        fig1.update_yaxes(title_text="")
+    else:
+        fig1 = empty_fig()
 
     # 스킬 트렌드 (상위 5개)
     top5 = (sf.groupby("skill_name").size().sort_values(ascending=False)
             .head(5).index.tolist()) if not sf.empty else []
     skill_w = skill_trend_weekly(sf, top5) if top5 else pd.DataFrame()
-    fig2 = chart_base(
-        px.line(skill_w, x="week", y="count", color="skill_name", markers=True,
-                labels={"week": "", "count": "언급 공고 수", "skill_name": "스킬"},
-                color_discrete_sequence=PALETTE)
-        if not skill_w.empty else empty_fig("스킬 데이터 없음"), height=320
-    )
+    if not skill_w.empty:
+        n_weeks_s = skill_w["week"].nunique()
+        if n_weeks_s < 2:
+            _fig2 = px.bar(skill_w, x="skill_name", y="count", color="skill_name",
+                           labels={"skill_name": "스킬", "count": "언급 공고 수"},
+                           color_discrete_sequence=PALETTE, text="count")
+            _fig2.update_traces(textposition="outside")
+        else:
+            _fig2 = px.line(skill_w, x="week", y="count", color="skill_name", markers=True,
+                            labels={"week": "주", "count": "언급 공고 수", "skill_name": "스킬"},
+                            color_discrete_sequence=PALETTE)
+        fig2 = chart_base(_fig2, height=320)
+        fig2.update_yaxes(title_text="")
+    else:
+        fig2 = empty_fig("스킬 데이터 없음")
 
     # 경력 분포
     exp_df = experience_distribution(df)
@@ -691,8 +730,24 @@ def update_salary(categories, sources):
     df = apply_filter(JOBS_DF, categories, sources)
     sal_df = salary_by_category(df)
 
+    # 연봉 공개 비율 차트 (항상 표시)
+    disclosed = df.dropna(subset=["salary_min"])
+    total_cnt = len(df)
+    disc_cnt  = len(disclosed)
+    disc_pct  = round(disc_cnt / total_cnt * 100, 1) if total_cnt else 0
+    disc_summary = html.Div([
+        html.Span(f"연봉 공개 {disc_cnt:,}건 ({disc_pct}%)",
+                  style={"fontWeight": 600, "color": BLUE}),
+        html.Span(f"  /  비공개 {total_cnt - disc_cnt:,}건",
+                  style={"color": GRAY, "marginLeft": "8px"}),
+    ], style={"fontSize": "0.85rem", "marginBottom": "16px"})
+
     if sal_df.empty:
-        return html.P("연봉 데이터가 없습니다. 연봉 비공개 공고가 많을 수 있습니다.", className="no-data")
+        return html.Div([
+            disc_summary,
+            html.P("연봉 공개 공고가 아직 없습니다. 누적 데이터가 쌓이면 분석이 가능합니다.",
+                   className="no-data"),
+        ])
 
     fig_box = chart_base(
         px.box(sal_df, x="job_category", y="salary_mid", color="job_category", points="all",
@@ -722,16 +777,19 @@ def update_salary(categories, sources):
     )
 
     return html.Div([
+        disc_summary,
         html.Div([
-            section_wrap("직군별 연봉 분포", dcc.Graph(figure=fig_box)),
-        ], style={"flex": "3"}),
-        html.Div([
-            section_wrap("직군별 연봉 통계", table),
-            section_wrap("연봉 분포 히스토그램", dcc.Graph(figure=fig_hist)),
-            html.P("* salary_mid = (최소+최대)/2. 연봉 미기재 제외.",
-                   style={"fontSize": "0.75rem", "color": GRAY, "marginTop": "6px"}),
-        ], style={"flex": "2"}),
-    ], style={"display": "flex", "gap": "16px"})
+            html.Div([
+                section_wrap("직군별 연봉 분포", dcc.Graph(figure=fig_box)),
+            ], style={"flex": "3"}),
+            html.Div([
+                section_wrap("직군별 연봉 통계", table),
+                section_wrap("연봉 분포 히스토그램", dcc.Graph(figure=fig_hist)),
+                html.P("* salary_mid = (최소+최대)/2. 연봉 미기재 제외.",
+                       style={"fontSize": "0.75rem", "color": GRAY, "marginTop": "6px"}),
+            ], style={"flex": "2"}),
+        ], style={"display": "flex", "gap": "16px"}),
+    ])
 
 
 # ── 기업 분석 ────────────────────────────────────────────────────

@@ -39,7 +39,7 @@ def load_skills_df(conn: sqlite3.Connection) -> pd.DataFrame:
 def weekly_job_counts(jobs_df: pd.DataFrame) -> pd.DataFrame:
     """주별 직군별 공고 수 집계."""
     df = jobs_df.copy()
-    df["week"] = df["collected_at"].dt.to_period("W").dt.start_time
+    df["week"] = df["collected_at"].dt.to_period("W").dt.start_time.dt.strftime("%Y-%m-%d")
     return (
         df.groupby(["week", "job_category"])
         .size()
@@ -70,7 +70,7 @@ def top_skills_by_category(skills_df: pd.DataFrame, top_n: int = 20) -> pd.DataF
 def skill_trend_weekly(skills_df: pd.DataFrame, skill_names: list[str]) -> pd.DataFrame:
     """지정 스킬들의 주별 언급 수 추이."""
     df = skills_df[skills_df["skill_name"].isin(skill_names)].copy()
-    df["week"] = df["collected_at"].dt.to_period("W").dt.start_time
+    df["week"] = df["collected_at"].dt.to_period("W").dt.start_time.dt.strftime("%Y-%m-%d")
     return (
         df.groupby(["week", "skill_name"])
         .size()
