@@ -77,6 +77,7 @@ class JobItem:
     company_name: str
     job_category: str
     skills: list[str] = field(default_factory=list)
+    industry: str | None = None   # 회사 업종 (소스에서 직접 수집)
     location: str | None = None
     experience_min: int | None = None
     experience_max: int | None = None
@@ -93,6 +94,7 @@ class JobItem:
             "title": self.title,
             "company_name": self.company_name,
             "job_category": self.job_category,
+            "industry": self.industry,
             "location": self.location,
             "experience_min": self.experience_min,
             "experience_max": self.experience_max,

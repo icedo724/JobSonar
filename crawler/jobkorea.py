@@ -153,6 +153,15 @@ class JobKoreaCrawler(BaseCrawler):
             # 스킬: 제목에서 추출
             skills = [normalize_skill(s) for s in extract_skills_from_text(title)]
 
+            # 업종: 업종 관련 span 탐색
+            industry = None
+            for span in card.find_all("span"):
+                txt = span.get_text(strip=True)
+                if span.get("class") and any("industry" in c or "sector" in c or "업종" in c
+                                              for c in span.get("class", [])):
+                    industry = txt or None
+                    break
+
             return JobItem(
                 source_site="jobkorea",
                 source_id=job_id,
@@ -160,6 +169,7 @@ class JobKoreaCrawler(BaseCrawler):
                 title=title,
                 company_name=company,
                 job_category=category,
+                industry=industry,
                 skills=skills,
                 location=location,
                 experience_min=exp_min,

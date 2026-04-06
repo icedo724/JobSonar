@@ -120,6 +120,12 @@ class SaraminCrawler(BaseCrawler):
             skill_text = skill_area.get_text(" ", strip=True) if skill_area else title
             skills = [normalize_skill(s) for s in extract_skills_from_text(skill_text)]
 
+            # 업종: .corp_sector 또는 company_info 섹션에서 파싱
+            industry = None
+            corp_sector = item.select_one(".corp_sector") or item.select_one("[class*='industry']")
+            if corp_sector:
+                industry = corp_sector.get_text(strip=True) or None
+
             # 상세 페이지는 robots.txt Disallow → relay URL 사용
             url = f"{SARAMIN_BASE}/zf_user/jobs/relay/view?rec_idx={job_id}"
 
@@ -130,6 +136,7 @@ class SaraminCrawler(BaseCrawler):
                 title=title,
                 company_name=company,
                 job_category=category,
+                industry=industry,
                 skills=skills,
                 location=location,
                 experience_min=exp_min,

@@ -156,6 +156,8 @@ class WantedCrawler(BaseCrawler):
                 except ValueError:
                     pass
 
+            industry = raw.get("company", {}).get("industry_name") or None
+
             return JobItem(
                 source_site="wanted",
                 source_id=job_id,
@@ -163,6 +165,7 @@ class WantedCrawler(BaseCrawler):
                 title=title,
                 company_name=company,
                 job_category=category,
+                industry=industry,
                 skills=skill_tags,
                 location=location,
                 experience_min=exp_min,

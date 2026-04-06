@@ -9,7 +9,7 @@ def load_jobs_df(conn: sqlite3.Connection) -> pd.DataFrame:
     return pd.read_sql_query(
         """
         SELECT j.id, j.title, j.company_name, j.job_category,
-               j.source_site, j.url, j.location,
+               j.industry, j.source_site, j.url, j.location,
                j.experience_min, j.experience_max,
                j.salary_min, j.salary_max, j.posted_date,
                j.deadline_date, j.collected_at, j.is_active
@@ -171,7 +171,7 @@ def load_jobs_for_board(conn: sqlite3.Connection) -> pd.DataFrame:
     jobs = pd.read_sql_query(
         """
         SELECT j.id, j.title, j.company_name, j.job_category,
-               j.source_site, j.url, j.location,
+               j.industry, j.source_site, j.url, j.location,
                j.experience_min, j.experience_max,
                j.salary_min, j.salary_max,
                j.posted_date, j.deadline_date, j.collected_at

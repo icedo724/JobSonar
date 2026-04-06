@@ -61,37 +61,10 @@ ALL_CATEGORIES = sorted(JOBS_DF["job_category"].dropna().unique().tolist())
 ALL_SOURCES    = ["wanted", "saramin", "jobkorea"]
 HAS_DATA       = len(JOBS_DF) > 0
 
-# ── 업종 분류 ────────────────────────────────────────────────────
-_INDUSTRY_RULES = [
-    ("게임",       ["게임", "game", "gaming", "넥슨", "크래프톤", "넷마블", "엔씨", "펄어비스", "컴투스", "위메이드"]),
-    ("메디컬",     ["의료", "병원", "헬스", "메디", "medical", "health", "pharma", "제약", "바이오", "clinc", "clinic", "의약"]),
-    ("금융/핀테크",["금융", "은행", "증권", "보험", "카드", "핀테크", "fintech", "토스", "카카오페이", "뱅크", "페이", "투자", "자산"]),
-    ("이커머스",   ["쇼핑", "커머스", "commerce", "유통", "물류", "배달", "쿠팡", "배민", "마켓", "셀러", "리테일"]),
-    ("교육/에듀텍",["교육", "에듀", "학원", "학교", "edtech", "러닝", "과외", "클래스"]),
-    ("미디어/광고",["미디어", "방송", "광고", "콘텐츠", "contents", "media", "엔터", "entertainment", "OTT", "스트리밍"]),
-    ("제조/반도체",["제조", "반도체", "전자", "자동차", "화학", "소재", "부품", "samsung", "삼성", "lg", "sk하이닉스"]),
-    ("공공/스타트업",["스타트업", "startup", "벤처", "공공", "공기업", "정부", "솔루션"]),
-]
-
-def classify_industry(company: str, title: str) -> str:
-    text = f"{company or ''} {title or ''}".lower()
-    for industry, keywords in _INDUSTRY_RULES:
-        if any(kw.lower() in text for kw in keywords):
-            return industry
-    return "IT/기타"
-
-def add_industry_col(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    df = df.copy()
-    df["industry"] = df.apply(
-        lambda r: classify_industry(r.get("company_name", ""), r.get("title", "")), axis=1
-    )
-    return df
-
-JOBS_DF  = add_industry_col(JOBS_DF)
-BOARD_DF = add_industry_col(BOARD_DF)
-ALL_INDUSTRIES = sorted(JOBS_DF["industry"].unique().tolist())
+# ── 업종 목록 (DB에서 직접 수집된 값 사용) ───────────────────────
+ALL_INDUSTRIES = sorted(
+    JOBS_DF["industry"].dropna().unique().tolist()
+) if "industry" in JOBS_DF.columns else []
 
 # ── 헬퍼 ─────────────────────────────────────────────────────────
 
