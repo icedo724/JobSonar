@@ -181,7 +181,7 @@ app.layout = html.Div([
         html.Div([
             html.Span("JobSonar", style={"fontSize": "1.15rem", "fontWeight": 800, "color": "#1352f1"}),
         ], style={"marginBottom": "4px"}),
-        html.P("한국 IT 채용 시장 트렌드", className="sidebar-sub"),
+        html.P("데이터직군 공고 모음", className="sidebar-sub"),
 
         html.Hr(className="sidebar-hr"),
         html.Label("직군", className="filter-label"),
@@ -195,7 +195,7 @@ app.layout = html.Div([
         ),
 
         html.Hr(className="sidebar-hr"),
-        html.Label("사이트", className="filter-label"),
+        html.Label("플랫폼", className="filter-label"),
         dcc.Checklist(
             id="filter-sources",
             options=[
@@ -244,7 +244,7 @@ app.layout = html.Div([
         # 헤더 배너
         html.Div([
             html.H1("JobSonar"),
-            html.P("한국 IT 채용 시장 트렌드 분석 · 원티드 · 사람인 · 잡코리아"),
+            html.P("데이터직군 공고 모음 · 원티드 · 사람인 · 잡코리아"),
         ], className="header-banner"),
 
         # KPI
