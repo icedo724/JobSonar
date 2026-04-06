@@ -1,0 +1,18 @@
+# 수집
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+selenium>=4.18          # Selenium 필요 시 (현재 원티드는 API 사용으로 불필요)
+
+# 분석
+pandas>=2.2
+networkx>=3.2
+
+# 시각화 / 대시보드
+plotly>=5.20
+dash>=2.17
+gunicorn>=21.2
+
+# 유틸
+python-dotenv>=1.0      # 환경변수 관리 (.env 파일)
+huggingface_hub>=0.22   # HF Dataset DB 동기화
