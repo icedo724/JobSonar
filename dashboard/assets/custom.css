@@ -40,16 +40,13 @@ body {
 .pill-checklist { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .pill-checklist input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-    pointer-events: none;
+    display: none;
 }
 
 .pill-checklist label {
-    display: inline-block;
-    padding: 5px 12px;
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 14px;
     border: 1.5px solid #e1e5ec;
     border-radius: 20px;
     cursor: pointer;
@@ -64,7 +61,8 @@ body {
     border-color: #1352f1;
     color: #1352f1;
 }
-.pill-checklist input[type="checkbox"]:checked + label {
+/* input이 label 안에 있는 Dash 구조 대응 */
+.pill-checklist label:has(input:checked) {
     background: #1352f1;
     color: #fff;
     border-color: #1352f1;
