@@ -2,8 +2,6 @@
 requests>=2.31
 beautifulsoup4>=4.12
 lxml>=5.0
-selenium>=4.18          # Selenium 필요 시 (현재 원티드는 API 사용으로 불필요)
-
 # 분석
 pandas>=2.2
 networkx>=3.2
