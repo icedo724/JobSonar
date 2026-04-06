@@ -102,10 +102,19 @@ def company_rankings(jobs_df: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:
     )
 
 
+_REGIONS = ["서울", "경기", "인천", "부산", "대구", "대전", "광주", "울산", "세종",
+            "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
+
+def _region(loc: str) -> str:
+    for r in _REGIONS:
+        if str(loc).startswith(r) or r in str(loc):
+            return r
+    return "해외"
+
 def location_distribution(jobs_df: pd.DataFrame) -> pd.DataFrame:
-    """지역별 공고 수. 첫 번째 공백 앞(시 단위)으로 정제."""
+    """지역별(시·도 단위) 공고 수."""
     df = jobs_df.dropna(subset=["location"]).copy()
-    df["city"] = df["location"].str.split().str[0]
+    df["city"] = df["location"].apply(_region)
     return (
         df.groupby(["city", "job_category"])
         .size()

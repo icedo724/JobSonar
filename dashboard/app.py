@@ -400,7 +400,6 @@ def update_sidebar(categories, sources, industries, emp_types):
 def update_kpis(categories, sources, industries, emp_types):
     df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
     sf = apply_filter(SKILLS_DF, categories, sources)
-    new7 = new_jobs_count(df, days=7)
 
     top_skill = "—"
     if not sf.empty:
@@ -409,9 +408,16 @@ def update_kpis(categories, sources, industries, emp_types):
     sal_df = salary_by_category(df)
     avg_sal = f"{int(sal_df['salary_mid'].median()):,}만원" if not sal_df.empty else "정보 없음"
 
+    # 마감 임박 7일
+    today = pd.Timestamp.now().normalize()
+    deadline_soon = 0
+    if "deadline_date" in df.columns:
+        d = df["deadline_date"].dropna()
+        deadline_soon = int(((d >= today) & (d <= today + pd.Timedelta(days=7))).sum())
+
     return [
         kpi_card("활성 공고", f"{len(df):,}건"),
-        kpi_card("최근 7일 신규", f"{new7:,}건"),
+        kpi_card("마감 임박 7일", f"{deadline_soon:,}건"),
         kpi_card("가장 요구된 스킬", top_skill),
         kpi_card("연봉 중간값", avg_sal),
     ]
@@ -657,10 +663,16 @@ def update_skill_right(categories, sources):
 
     growth = skill_growth_rate(sf)
     if not growth.empty:
-        fig = px.bar(growth.head(10).sort_values("growth_pct"),
-                     x="growth_pct", y="skill_name", orientation="h",
-                     labels={"growth_pct": "증감률(%)", "skill_name": ""},
-                     color="growth_pct", color_continuous_scale=[BLUE_LIGHT, BLUE], height=300)
+        # prev=0인 항목은 증감률이 아닌 신규 등장 — 건수로 표시
+        has_prev = (growth["prev"] > 0).any()
+        if has_prev:
+            x_col, x_label = "growth_pct", "증감률 (%)"
+        else:
+            x_col, x_label = "recent", "최근 2주 언급 공고 수"
+        fig = px.bar(growth.head(10).sort_values(x_col),
+                     x=x_col, y="skill_name", orientation="h",
+                     labels={x_col: x_label, "skill_name": ""},
+                     color=x_col, color_continuous_scale=[BLUE_LIGHT, BLUE], height=300)
         fig.update_layout(coloraxis_showscale=False, plot_bgcolor=WHITE,
                           paper_bgcolor=WHITE, margin=dict(l=0, r=0, t=10, b=0))
         fig.update_xaxes(showgrid=False)
@@ -831,10 +843,15 @@ def update_company(categories, sources, industries, emp_types, top_n):
     if not loc_df.empty:
         pivot = loc_df.pivot_table(index="city", columns="job_category",
                                    values="count", fill_value=0).head(10)
+        pivot.index.name = "지역"
+        pivot.columns.name = "직군"
         fig_heat = px.imshow(pivot, color_continuous_scale=["white", BLUE],
-                             labels={"color": "공고 수"}, aspect="auto", height=260)
+                             labels={"color": "공고 수", "x": "직군", "y": "지역"},
+                             aspect="auto", height=260)
         fig_heat.update_layout(margin=dict(l=0, r=0, t=10, b=0), paper_bgcolor=WHITE,
                                coloraxis_colorbar=dict(thickness=10))
+        fig_heat.update_xaxes(title_text="")
+        fig_heat.update_yaxes(title_text="")
     else:
         fig_heat = empty_fig()
 
