@@ -427,7 +427,7 @@ def update_board(categories, sources, keyword, location, exp, page):
     cards = []
     for _, row in page_data.iterrows():
         skills_el = html.Div(
-            [html.Span(s.strip(), className="skill-badge")
+            [html.Span(s.strip().title(), className="skill-badge")
              for s in str(row.get("skills", "")).split("·")
              if s.strip() and pd.notna(row.get("skills"))],
             className="job-skills",
