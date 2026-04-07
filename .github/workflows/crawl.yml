@@ -51,7 +51,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
 
-      # 업데이트된 DB를 HF Dataset에 푸시 → Spaces가 자동으로 최신 데이터 사용
+      # 업데이트된 DB를 HF Dataset에 푸시
       - name: Push DB to HF Dataset
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -66,7 +66,20 @@ jobs:
               path_in_repo="jobsonar.db",
               repo_id=os.environ["HF_DATASET_REPO"],
               repo_type="dataset",
-              commit_message="chore: weekly DB update",
+              commit_message="chore: daily DB update",
           )
           print("HF Dataset 업로드 완료")
+          EOF
+
+      # Space 재시작 → 새 DB 로드
+      - name: Restart HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import os
+          from huggingface_hub import HfApi
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.restart_space(repo_id="mininiming/jobsonar", token=os.environ["HF_TOKEN"])
+          print("Space 재시작 완료")
           EOF
