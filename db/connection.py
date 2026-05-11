@@ -104,3 +104,39 @@ def insert_skills(conn: sqlite3.Connection, job_id: int, skills: list[str]) -> N
         "INSERT OR IGNORE INTO job_skills (job_id, skill_name) VALUES (?, ?)",
         [(job_id, s.strip()) for s in skills if s.strip()],
     )
+
+
+def deactivate_expired_jobs(conn: sqlite3.Connection) -> dict[str, int]:
+    """만료 공고를 is_active=0으로 표시.
+
+    두 가지 기준으로 비활성화:
+    1. deadline_date 기준: 마감일이 오늘 이전인 공고 (명시적 만료)
+    2. 비활성 staleness 기준: 마감일 정보가 없고 7일 이상 크롤러에서 다시 발견되지 않은 공고
+       - upsert_job()은 공고를 발견할 때마다 updated_at을 갱신하므로,
+         updated_at이 오래된 공고 = 사이트에서 사라진 것으로 추정
+
+    반환: {"by_deadline": N, "by_staleness": M}  (비활성화된 각 건수)
+    """
+    # 1) 마감일 지난 공고
+    cur_deadline = conn.execute(
+        """
+        UPDATE jobs
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE is_active = 1
+          AND deadline_date IS NOT NULL
+          AND deadline_date < date('now')
+        """
+    )
+    # 2) 마감일 없이 7일 이상 미발견 공고
+    cur_stale = conn.execute(
+        """
+        UPDATE jobs
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE is_active = 1
+          AND updated_at < datetime('now', '-7 days')
+        """
+    )
+    return {
+        "by_deadline": cur_deadline.rowcount,
+        "by_staleness": cur_stale.rowcount,
+    }

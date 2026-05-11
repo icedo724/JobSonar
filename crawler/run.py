@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from crawler import WantedCrawler, SaraminCrawler, JobKoreaCrawler
-from db.connection import init_db, get_conn, upsert_job, insert_skills
+from db.connection import init_db, get_conn, upsert_job, insert_skills, deactivate_expired_jobs
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,6 +100,15 @@ def main():
             f"업데이트 {stats.get('updated', 0)}건 / "
             f"오류 {stats['errors']}건 ==="
         )
+
+    # 전체 크롤 완료 후 만료 공고 비활성화
+    with get_conn() as conn:
+        expired = deactivate_expired_jobs(conn)
+    logger.info(
+        f"만료 공고 비활성화 — "
+        f"마감일 초과: {expired['by_deadline']}건, "
+        f"7일 미발견(마감일 없음): {expired['by_staleness']}건"
+    )
 
 
 if __name__ == "__main__":

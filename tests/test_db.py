@@ -7,7 +7,7 @@ from datetime import date
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from db.connection import init_db, get_conn, upsert_job, insert_skills, _is_cross_site_duplicate
+from db.connection import init_db, get_conn, upsert_job, insert_skills, _is_cross_site_duplicate, deactivate_expired_jobs
 
 # 테스트용 인메모리 DB 경로
 _TEST_DB = Path(":memory:")
@@ -153,3 +153,72 @@ class TestCrossSiteDuplicate:
             _sample_job(source_site="wanted", source_id="2"),
         )
         assert is_dup is False
+
+
+# ── deactivate_expired_jobs ───────────────────────────────────────
+
+class TestDeactivateExpiredJobs:
+    def test_deactivates_past_deadline(self):
+        """마감일이 지난 공고는 비활성화."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_id="1", deadline_date="2020-01-01"))
+        conn.commit()
+        result = deactivate_expired_jobs(conn)
+        conn.commit()
+        assert result["by_deadline"] >= 1
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='1'").fetchone()
+        assert row["is_active"] == 0
+
+    def test_keeps_future_deadline_active(self):
+        """마감일이 아직 남은 공고는 유지."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_id="2", deadline_date="2099-12-31"))
+        conn.commit()
+        deactivate_expired_jobs(conn)
+        conn.commit()
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='2'").fetchone()
+        assert row["is_active"] == 1
+
+    def test_deactivates_stale_no_deadline(self):
+        """마감일 없이 7일 이상 발견되지 않은 공고는 비활성화."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_id="3", deadline_date=None))
+        conn.commit()
+        # updated_at을 8일 전으로 강제 설정
+        conn.execute(
+            "UPDATE jobs SET updated_at = datetime('now', '-8 days') WHERE source_id='3'"
+        )
+        conn.commit()
+        result = deactivate_expired_jobs(conn)
+        conn.commit()
+        assert result["by_staleness"] >= 1
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='3'").fetchone()
+        assert row["is_active"] == 0
+
+    def test_keeps_recent_no_deadline_active(self):
+        """마감일 없어도 최근(1일)에 발견된 공고는 유지."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_id="4", deadline_date=None))
+        conn.commit()
+        deactivate_expired_jobs(conn)
+        conn.commit()
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='4'").fetchone()
+        assert row["is_active"] == 1
+
+    def test_already_inactive_not_double_counted(self):
+        """이미 비활성인 공고는 카운트에 포함되지 않음 (rowcount=0)."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_id="5", deadline_date="2020-01-01"))
+        conn.execute("UPDATE jobs SET is_active=0 WHERE source_id='5'")
+        conn.commit()
+        result = deactivate_expired_jobs(conn)
+        # 이미 0인 행은 UPDATE 영향 없음
+        assert result["by_deadline"] == 0
+        assert result["by_staleness"] == 0
+
+    def test_returns_correct_counts(self):
+        """반환 딕셔너리에 by_deadline / by_staleness 키가 있음."""
+        conn = _make_in_memory_conn()
+        result = deactivate_expired_jobs(conn)
+        assert "by_deadline" in result
+        assert "by_staleness" in result
