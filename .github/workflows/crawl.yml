@@ -73,7 +73,9 @@ jobs:
 
       # Space 재시작 → 새 DB 로드
       # HF_SPACE_REPO 시크릿 미설정 시 "mininiming/jobsonar" 를 기본값으로 사용
+      # continue-on-error: DB 업로드 성공 후 Space 재시작 실패가 전체 워크플로우를 막지 않도록
       - name: Restart HF Space
+        continue-on-error: true
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE_REPO: ${{ secrets.HF_SPACE_REPO }}
@@ -82,8 +84,9 @@ jobs:
           import os
           from huggingface_hub import HfApi
           api = HfApi(token=os.environ["HF_TOKEN"])
-          # .get() 대신 or 연산자 사용: 빈 문자열('')도 기본값으로 폴백
+          # or 연산자: 빈 문자열('')·None 모두 기본값으로 폴백 (.get(key, default) 는 빈 문자열 폴백 안 됨)
           space_repo = os.environ.get("HF_SPACE_REPO") or "mininiming/jobsonar"
-          api.restart_space(repo_id=space_repo, token=os.environ["HF_TOKEN"])
+          print(f"Space 재시작 시도: {space_repo}")
+          api.restart_space(repo_id=space_repo)
           print(f"Space 재시작 완료: {space_repo}")
           EOF
