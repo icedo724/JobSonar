@@ -72,14 +72,17 @@ jobs:
           EOF
 
       # Space 재시작 → 새 DB 로드
+      # HF_SPACE_REPO 시크릿: Settings > Secrets > Actions에 추가 (예: mininiming/jobsonar)
       - name: Restart HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ secrets.HF_SPACE_REPO }}
         run: |
           python - <<'EOF'
           import os
           from huggingface_hub import HfApi
           api = HfApi(token=os.environ["HF_TOKEN"])
-          api.restart_space(repo_id="mininiming/jobsonar", token=os.environ["HF_TOKEN"])
-          print("Space 재시작 완료")
+          space_repo = os.environ.get("HF_SPACE_REPO", "mininiming/jobsonar")
+          api.restart_space(repo_id=space_repo, token=os.environ["HF_TOKEN"])
+          print(f"Space 재시작 완료: {space_repo}")
           EOF

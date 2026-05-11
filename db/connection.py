@@ -99,8 +99,8 @@ def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:
 
 
 def insert_skills(conn: sqlite3.Connection, job_id: int, skills: list[str]) -> None:
-    """스킬 태그 일괄 삽입 (중복 무시)."""
+    """스킬 태그 일괄 삽입 (중복 무시). normalize_skill 완료된 값 그대로 저장."""
     conn.executemany(
         "INSERT OR IGNORE INTO job_skills (job_id, skill_name) VALUES (?, ?)",
-        [(job_id, s.lower().strip()) for s in skills if s.strip()],
+        [(job_id, s.strip()) for s in skills if s.strip()],
     )

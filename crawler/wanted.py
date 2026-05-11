@@ -54,6 +54,7 @@ class WantedCrawler(BaseCrawler):
     SITE_NAME = "wanted"
     MIN_DELAY = 1.5
     MAX_DELAY = 3.0
+    CATEGORY_MAP = WANTED_TAG_IDS
 
     def __init__(self):
         super().__init__()
@@ -112,13 +113,6 @@ class WantedCrawler(BaseCrawler):
 
         logger.info(f"[wanted] {category} 총 {len(jobs)}건 수집 완료")
         return jobs
-
-    def crawl_all_categories(self, max_pages: int = 10) -> list[JobItem]:
-        """전체 대상 직군 수집."""
-        all_jobs: list[JobItem] = []
-        for category in WANTED_TAG_IDS:
-            all_jobs.extend(self.crawl(category, max_pages=max_pages))
-        return all_jobs
 
     def fetch_detail(self, job_id: str) -> dict | None:
         """개별 공고 상세 API 호출 (스킬 태그 보강용)."""

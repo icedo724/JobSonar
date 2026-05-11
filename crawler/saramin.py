@@ -39,6 +39,7 @@ class SaraminCrawler(BaseCrawler):
     SITE_NAME = "saramin"
     MIN_DELAY = 2.0
     MAX_DELAY = 4.0
+    CATEGORY_MAP = SARAMIN_KEYWORDS
 
     def crawl(self, category: str, max_pages: int = 10) -> list[JobItem]:
         keyword = SARAMIN_KEYWORDS.get(category)
@@ -79,12 +80,6 @@ class SaraminCrawler(BaseCrawler):
 
         logger.info(f"[saramin] {category} 총 {len(jobs)}건 수집 완료")
         return jobs
-
-    def crawl_all_categories(self, max_pages: int = 10) -> list[JobItem]:
-        all_jobs: list[JobItem] = []
-        for category in SARAMIN_KEYWORDS:
-            all_jobs.extend(self.crawl(category, max_pages=max_pages))
-        return all_jobs
 
     def _parse_item(self, item: BeautifulSoup, category: str) -> JobItem | None:
         try:

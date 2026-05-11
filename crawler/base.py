@@ -1,4 +1,5 @@
 """공통 크롤러 베이스 클래스."""
+import re
 import time
 import random
 import logging
@@ -77,7 +78,10 @@ SKILL_ALIASES: dict[str, str] = {
     "jenkins": "Jenkins",
     "github actions": "GitHub Actions",
     "gitlab ci": "GitLab CI",
-    "git": "Git", "github": "Git", "gitlab": "Git",
+    "git": "Git",
+    # GitHub·GitLab은 플랫폼 자체로 독립 추적
+    "github": "GitHub",
+    "gitlab": "GitLab",
     "linux": "Linux", "ubuntu": "Linux",
 
     # ML / DL 프레임워크
@@ -142,12 +146,10 @@ def normalize_skill(raw: str) -> str:
 
 def extract_skills_from_text(text: str) -> list[str]:
     """텍스트에서 알려진 스킬 키워드를 추출. 단일 문자 키워드는 단어 경계 적용."""
-    import re
     text_lower = text.lower()
     found = set()
     for alias, canonical in SKILL_ALIASES.items():
         if len(alias) <= 2:
-            # 'r', 'R' 등 짧은 키워드는 단어 경계 매칭
             if re.search(rf"\b{re.escape(alias)}\b", text_lower):
                 found.add(canonical)
         else:
@@ -166,8 +168,8 @@ class JobItem:
     company_name: str
     job_category: str
     skills: list[str] = field(default_factory=list)
-    industry: str | None = None        # 회사 업종
-    employment_type: str | None = None # 정규직 | 계약직 | 인턴 등
+    industry: str | None = None
+    employment_type: str | None = None
     location: str | None = None
     experience_min: int | None = None
     experience_max: int | None = None
@@ -200,8 +202,10 @@ class BaseCrawler(ABC):
     """모든 크롤러의 공통 인터페이스."""
 
     SITE_NAME: str = ""
-    MIN_DELAY: float = 1.5   # 요청 간 최소 딜레이 (초)
+    MIN_DELAY: float = 1.5
     MAX_DELAY: float = 3.5
+    # 서브클래스에서 {직군명: 사이트별 키/ID} 형태로 오버라이드
+    CATEGORY_MAP: dict = {}
 
     def __init__(self):
         self.session = requests.Session()
@@ -233,3 +237,10 @@ class BaseCrawler(ABC):
     def crawl(self, category: str, max_pages: int = 10) -> list[JobItem]:
         """주어진 직군 카테고리의 공고를 수집해 반환."""
         ...
+
+    def crawl_all_categories(self, max_pages: int = 10) -> list[JobItem]:
+        """CATEGORY_MAP의 모든 직군을 순서대로 수집해 반환."""
+        all_jobs: list[JobItem] = []
+        for category in self.CATEGORY_MAP:
+            all_jobs.extend(self.crawl(category, max_pages=max_pages))
+        return all_jobs

@@ -73,6 +73,7 @@ class JobKoreaCrawler(BaseCrawler):
     SITE_NAME = "jobkorea"
     MIN_DELAY = 2.0
     MAX_DELAY = 4.0
+    CATEGORY_MAP = JOBKOREA_KEYWORDS
 
     def crawl(self, category: str, max_pages: int = 10) -> list[JobItem]:
         keyword = JOBKOREA_KEYWORDS.get(category)
@@ -122,12 +123,6 @@ class JobKoreaCrawler(BaseCrawler):
 
         logger.info(f"[jobkorea] {category} 총 {len(jobs)}건 수집 완료")
         return jobs
-
-    def crawl_all_categories(self, max_pages: int = 10) -> list[JobItem]:
-        all_jobs: list[JobItem] = []
-        for category in JOBKOREA_KEYWORDS:
-            all_jobs.extend(self.crawl(category, max_pages=max_pages))
-        return all_jobs
 
     def _parse_card(self, card: Tag, job_id: str, category: str) -> JobItem | None:
         try:

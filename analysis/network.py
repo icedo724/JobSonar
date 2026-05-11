@@ -21,7 +21,7 @@ def build_cooccurrence_graph(
     Returns:
         G: nodes = 스킬, edges = (스킬A, 스킬B, weight=공동출현수)
     """
-    where = "WHERE j.is_active = 1"
+    where = "WHERE j.is_active = 1 AND j.is_duplicate = 0"
     params: list = []
     if category:
         where += " AND j.job_category = ?"

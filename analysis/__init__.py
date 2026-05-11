@@ -1,4 +1,5 @@
 from .trends import (
+    normalize_location,
     load_jobs_df,
     load_skills_df,
     load_jobs_for_board,
@@ -15,6 +16,7 @@ from .trends import (
 from .network import build_cooccurrence_graph, get_top_central_skills, graph_to_plotly_traces
 
 __all__ = [
+    "normalize_location",
     "load_jobs_df", "load_skills_df", "load_jobs_for_board",
     "weekly_job_counts", "top_skills_by_category",
     "skill_trend_weekly", "salary_by_category",

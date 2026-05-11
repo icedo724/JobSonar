@@ -7,10 +7,8 @@ GitHub Actions 또는 로컬에서 직접 실행:
 import argparse
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
-# 프로젝트 루트를 sys.path에 추가 (모듈 임포트용)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from crawler import WantedCrawler, SaraminCrawler, JobKoreaCrawler
@@ -37,32 +35,41 @@ def run_crawler(source: str, max_pages: int) -> dict:
 
     stats = {"found": len(jobs), "inserted": 0, "updated": 0, "errors": 0}
 
-    init_db()
     with get_conn() as conn:
-        # 수집 로그 시작
         log_id = conn.execute(
             "INSERT INTO crawl_logs (source_site, status) VALUES (?, 'running')",
             (source,),
         ).lastrowid
 
-        for job in jobs:
-            try:
-                job_id, action = upsert_job(conn, job.to_db_dict())
-                insert_skills(conn, job_id, job.skills)
-                stats[action] = stats.get(action, 0) + 1
-            except Exception as e:
-                logger.error(f"DB 저장 실패: {e} — {job.source_id}")
-                stats["errors"] += 1
+        try:
+            for job in jobs:
+                try:
+                    job_id, action = upsert_job(conn, job.to_db_dict())
+                    insert_skills(conn, job_id, job.skills)
+                    stats[action] = stats.get(action, 0) + 1
+                except Exception as e:
+                    logger.error(f"DB 저장 실패: {e} — {job.source_id}")
+                    stats["errors"] += 1
 
-        conn.execute(
-            """
-            UPDATE crawl_logs
-            SET finished_at=CURRENT_TIMESTAMP, status='success',
-                jobs_found=:found, jobs_inserted=:inserted, jobs_updated=:updated
-            WHERE id=:log_id
-            """,
-            {**stats, "log_id": log_id},
-        )
+            conn.execute(
+                """
+                UPDATE crawl_logs
+                SET finished_at=CURRENT_TIMESTAMP, status='success',
+                    jobs_found=:found, jobs_inserted=:inserted, jobs_updated=:updated
+                WHERE id=:log_id
+                """,
+                {**stats, "log_id": log_id},
+            )
+        except Exception as e:
+            conn.execute(
+                """
+                UPDATE crawl_logs
+                SET finished_at=CURRENT_TIMESTAMP, status='failed', error_message=?
+                WHERE id=?
+                """,
+                (str(e), log_id),
+            )
+            raise
 
     return stats
 
@@ -80,6 +87,8 @@ def main():
     args = parser.parse_args()
 
     sources = ["wanted", "saramin", "jobkorea"] if args.source == "all" else [args.source]
+
+    init_db()
 
     for source in sources:
         logger.info(f"=== {source.upper()} 크롤링 시작 ===")

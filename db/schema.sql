@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS job_skills (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id      INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-    skill_name  TEXT    NOT NULL,               -- 정규화된 스킬명 (소문자)
+    skill_name  TEXT    NOT NULL,               -- 정규화된 스킬명 (SKILL_ALIASES canonical 값)
     UNIQUE(job_id, skill_name)
 );
 

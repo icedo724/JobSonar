@@ -2,6 +2,7 @@
 requests>=2.31
 beautifulsoup4>=4.12
 lxml>=5.0
+
 # 분석
 pandas>=2.2
 networkx>=3.2
@@ -14,3 +15,6 @@ gunicorn>=21.2
 # 유틸
 python-dotenv>=1.0      # 환경변수 관리 (.env 파일)
 huggingface_hub>=0.22   # HF Dataset DB 동기화
+
+# 개발 / 테스트
+pytest>=8.0
