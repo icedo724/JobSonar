@@ -85,11 +85,12 @@ def register(app) -> None:
             .sort_values("공고 수", ascending=False)
             .head(25)
             .reset_index(drop=True)
+            .rename(columns={"skill_name": "스킬"})
         )
         rank.index += 1
         table = dash_table.DataTable(
             data=rank.reset_index().rename(columns={"index": "#"}).to_dict("records"),
-            columns=[{"name": c, "id": c} for c in ["#", "skill_name", "공고 수"]],
+            columns=[{"name": c, "id": c} for c in ["#", "스킬", "공고 수"]],
             style_table={"height": "280px", "overflowY": "auto"},
             style_header={
                 "background": BLUE_LIGHT, "color": BLUE,

@@ -1,3 +1,6 @@
+/* ── Font ─────────────────────────────────────────────────── */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
 /* ── Base ─────────────────────────────────────────────────── */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -200,6 +203,7 @@ body {
     transition: all 0.15s;
 }
 .page-btn:hover { background: #f0f4ff; border-color: #1352f1; color: #1352f1; }
+.page-btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
 
 /* ── Misc ─────────────────────────────────────────────────── */
 .no-data { color: #adb5bd; font-size: 0.88rem; padding: 28px 0; text-align: center; }

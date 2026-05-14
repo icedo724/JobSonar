@@ -74,9 +74,14 @@ def register(app) -> None:
             .reset_index()
             .rename(columns={"job_category": "직군"})
         )
+        salary_cols = ["중간값", "평균", "최저", "최고"]
         table = dash_table.DataTable(
             data=stat.to_dict("records"),
-            columns=[{"name": c, "id": c} for c in stat.columns],
+            columns=[
+                {"name": c, "id": c, "type": "numeric",
+                 "format": {"specifier": ","} if c in salary_cols else {}}
+                for c in stat.columns
+            ],
             style_header={
                 "background": BLUE_LIGHT, "color": BLUE,
                 "fontWeight": 600, "fontSize": "0.82rem",

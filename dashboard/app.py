@@ -152,7 +152,9 @@ app.layout = html.Div([
 
             # ── 트렌드 ────────────────────────────────────────────
             dcc.Tab(label="트렌드", value="trend", style=_TAB, selected_style=_TAB_SEL, children=[
-                html.Div(id="trend-content", className="tab-inner"),
+                dcc.Loading(type="circle", color=BLUE, children=[
+                    html.Div(id="trend-content", className="tab-inner"),
+                ]),
             ]),
 
             # ── 기술 스택 ─────────────────────────────────────────
@@ -207,13 +209,17 @@ app.layout = html.Div([
                     ], style={"display": "flex", "gap": "20px", "alignItems": "flex-end", "marginBottom": "14px"}),
                     html.Div(id="network-metrics",
                              style={"display": "flex", "gap": "16px", "marginBottom": "12px"}),
-                    dcc.Graph(id="network-graph"),
+                    dcc.Loading(type="circle", color=BLUE, children=[
+                        dcc.Graph(id="network-graph"),
+                    ]),
                 ], className="tab-inner"),
             ]),
 
             # ── 연봉 분석 ─────────────────────────────────────────
             dcc.Tab(label="연봉 분석", value="salary", style=_TAB, selected_style=_TAB_SEL, children=[
-                html.Div(id="salary-content", className="tab-inner"),
+                dcc.Loading(type="circle", color=BLUE, children=[
+                    html.Div(id="salary-content", className="tab-inner"),
+                ]),
             ]),
 
             # ── 기업 분석 ─────────────────────────────────────────

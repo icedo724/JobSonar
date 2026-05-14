@@ -52,6 +52,8 @@ def register(app) -> None:
         Output("board-cards", "children"),
         Output("board-count", "children"),
         Output("board-page-info", "children"),
+        Output("board-prev", "disabled"),
+        Output("board-next", "disabled"),
         Input("filter-categories", "value"),
         Input("filter-sources", "value"),
         Input("filter-industry", "value"),
@@ -66,7 +68,7 @@ def register(app) -> None:
                      keyword, location, exp, sort, page):
         PAGE_SIZE = 20
         if not categories or not sources:
-            return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1"
+            return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1", True, True
 
         df = apply_filter(BOARD_DF, categories, sources, industries, emp_types)
 
@@ -142,4 +144,6 @@ def register(app) -> None:
             cards or [html.P("조건에 맞는 공고가 없습니다.", className="no-data")],
             count_text,
             page_info,
+            page <= 1,           # board-prev disabled
+            page >= total_pages, # board-next disabled
         )
