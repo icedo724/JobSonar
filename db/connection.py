@@ -1,6 +1,8 @@
 """DB 연결 및 초기화 헬퍼."""
+import re
 import sqlite3
 import os
+from difflib import SequenceMatcher
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -41,21 +43,50 @@ def get_conn(db_path: Path = DB_PATH):
         conn.close()
 
 
+def _normalize_title_for_dedup(s: str) -> str:
+    """중복 감지용 제목 정규화.
+    괄호·대괄호 내용 제거 → 소문자 → 한글·영숫자 이외 문자 모두 제거.
+    결과: 공백 없는 연속 문자열 (예: "데이터엔지니어", "senoir데이터엔지니어")
+    """
+    s = s.lower()
+    s = re.sub(r'[\(\[（【].*?[\)\]）】]', '', s)   # (경력 3년), [신입] 등 제거
+    s = re.sub(r'[^a-z0-9가-힣ᄀ-ᇿ㄰-㆏]', '', s)
+    return s
+
+
+def _titles_are_duplicate(a: str, b: str) -> bool:
+    """두 제목이 동일 공고를 나타낼 가능성이 높으면 True.
+
+    판단 기준 (정규화 후):
+    1. 짧은 쪽이 긴 쪽에 포함(contains) → 동일 직무에 접두/접미어가 붙은 케이스
+       예: "데이터엔지니어" ⊂ "시니어데이터엔지니어"
+    2. SequenceMatcher ratio ≥ 0.82 → 오탈자·띄어쓰기 차이 커버
+       예: "데이터 엔지니어" vs "데이터엔지니어" → 정규화 후 동일(1.0)
+    """
+    na, nb = _normalize_title_for_dedup(a), _normalize_title_for_dedup(b)
+    if not na or not nb:
+        return False
+    shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
+    return shorter in longer or SequenceMatcher(None, na, nb).ratio() >= 0.82
+
+
 def _is_cross_site_duplicate(conn: sqlite3.Connection, job: dict) -> bool:
-    """동일 회사+제목의 공고가 다른 사이트에 이미 존재하면 True."""
-    row = conn.execute(
+    """동일 회사 + 유사 제목의 공고가 다른 사이트에 이미 존재하면 True.
+
+    기존 완전 일치(lower+trim) → 퍼지 매칭(_titles_are_duplicate)으로 개선.
+    같은 회사의 후보 공고를 모두 가져와 Python 레벨에서 유사도 비교.
+    """
+    rows = conn.execute(
         """
-        SELECT 1 FROM jobs
+        SELECT title FROM jobs
         WHERE lower(trim(company_name)) = lower(trim(?))
-          AND lower(trim(title))        = lower(trim(?))
           AND source_site               != ?
           AND is_active                 = 1
           AND is_duplicate              = 0
-        LIMIT 1
         """,
-        (job["company_name"], job["title"], job["source_site"]),
-    ).fetchone()
-    return row is not None
+        (job["company_name"], job["source_site"]),
+    ).fetchall()
+    return any(_titles_are_duplicate(job["title"], row["title"]) for row in rows)
 
 
 def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:

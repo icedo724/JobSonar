@@ -7,7 +7,10 @@ GitHub Actions 또는 로컬에서 직접 실행:
 import argparse
 import logging
 import sys
+import time
 from pathlib import Path
+
+import requests as _requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -20,6 +23,76 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+_CRAWL_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/122.0.0.0 Safari/537.36"
+)
+
+
+def validate_job_links(
+    conn,
+    session=None,
+    max_checks: int = 30,
+    delay: float = 1.5,
+) -> dict[str, int]:
+    """활성 공고 URL 유효성 검사 (HTTP HEAD 요청).
+
+    대상: 마감일 없는 활성 공고 중 최근 14일 내 수집된 것 (최대 max_checks건).
+    HTTP 4xx 응답 → is_active=0 (링크 만료 확인).
+    네트워크 오류는 false negative 허용(무시) — 보수적 접근.
+
+    Args:
+        conn: SQLite 커넥션
+        session: requests.Session (테스트 시 mock 주입용). None이면 신규 생성.
+        max_checks: 한 번에 검사할 최대 URL 수 (요청 수 제한)
+        delay: 요청 사이 대기 시간(초). 테스트 시 0 전달.
+    """
+    own_session = session is None
+    if own_session:
+        session = _requests.Session()
+        session.headers["User-Agent"] = _CRAWL_UA
+
+    jobs = conn.execute(
+        """
+        SELECT id, url, source_site FROM jobs
+        WHERE is_active = 1
+          AND deadline_date IS NULL
+          AND collected_at >= datetime('now', '-14 days')
+        ORDER BY collected_at DESC
+        LIMIT ?
+        """,
+        (max_checks,),
+    ).fetchall()
+
+    checked = 0
+    deactivated = 0
+
+    for job in jobs:
+        try:
+            resp = session.head(job["url"], allow_redirects=True, timeout=10)
+            checked += 1
+            if resp.status_code >= 400:
+                conn.execute(
+                    "UPDATE jobs SET is_active=0, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (job["id"],),
+                )
+                deactivated += 1
+                logger.info(
+                    f"[{job['source_site']}] HTTP {resp.status_code} → 링크 만료 비활성화"
+                )
+        except Exception as e:
+            logger.debug(f"[URL 검사] 오류 (무시): {e}")
+
+        if delay > 0:
+            time.sleep(delay)
+
+    if own_session:
+        session.close()
+
+    return {"checked": checked, "deactivated": deactivated}
 
 
 def run_crawler(source: str, max_pages: int) -> dict:
@@ -101,13 +174,19 @@ def main():
             f"오류 {stats['errors']}건 ==="
         )
 
-    # 전체 크롤 완료 후 만료 공고 비활성화
+    # 전체 크롤 완료 후 만료 공고 비활성화 + URL 링크 검증
     with get_conn() as conn:
         expired = deactivate_expired_jobs(conn)
+        logger.info(
+            f"만료 공고 비활성화 — "
+            f"마감일 초과: {expired['by_deadline']}건, "
+            f"7일 미발견: {expired['by_staleness']}건"
+        )
+        link_stats = validate_job_links(conn, max_checks=30, delay=1.5)
     logger.info(
-        f"만료 공고 비활성화 — "
-        f"마감일 초과: {expired['by_deadline']}건, "
-        f"7일 미발견(마감일 없음): {expired['by_staleness']}건"
+        f"URL 링크 검증 — "
+        f"검사: {link_stats['checked']}건, "
+        f"링크 만료 비활성화: {link_stats['deactivated']}건"
     )
 
 
