@@ -137,19 +137,45 @@ def insert_skills(conn: sqlite3.Connection, job_id: int, skills: list[str]) -> N
     )
 
 
-def deactivate_expired_jobs(conn: sqlite3.Connection) -> dict[str, int]:
-    """만료 공고를 is_active=0으로 표시.
+def deactivate_unseen_jobs(
+    conn: sqlite3.Connection,
+    source_site: str,
+    crawl_start_iso: str,
+) -> int:
+    """해당 소스에서 이번 크롤에 발견되지 않은 공고를 즉시 비활성화.
 
-    두 가지 기준으로 비활성화:
-    1. deadline_date 기준: 마감일이 오늘 이전인 공고 (명시적 만료)
-    2. 비활성 staleness 기준: 마감일 정보가 없고 7일 이상 크롤러에서 다시 발견되지 않은 공고
-       - upsert_job()은 공고를 발견할 때마다 updated_at을 갱신하므로,
-         updated_at이 오래된 공고 = 사이트에서 사라진 것으로 추정
+    upsert_job()은 공고를 발견할 때마다 updated_at을 현재 시각으로 갱신함.
+    따라서 crawl_start_iso 이전에 updated_at이 머물러 있는 공고
+    = 이번 크롤에서 한 번도 발견되지 않은 공고 = 사이트에서 내려진 것으로 판단.
 
-    반환: {"by_deadline": N, "by_staleness": M}  (비활성화된 각 건수)
+    Args:
+        source_site:    'wanted' | 'saramin' | 'jobkorea'
+        crawl_start_iso: 크롤 시작 시각 (UTC, 'YYYY-MM-DD HH:MM:SS')
+
+    반환: 비활성화된 공고 수
     """
-    # 1) 마감일 지난 공고
-    cur_deadline = conn.execute(
+    cur = conn.execute(
+        """
+        UPDATE jobs
+        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE source_site = ?
+          AND is_active   = 1
+          AND updated_at  < ?
+        """,
+        (source_site, crawl_start_iso),
+    )
+    return cur.rowcount
+
+
+def deactivate_expired_jobs(conn: sqlite3.Connection) -> int:
+    """마감일이 지난 공고를 is_active=0으로 표시 (deadline_date 기준).
+
+    당일 크롤 미발견 공고는 run_crawler() 내 deactivate_unseen_jobs()로 처리.
+    이 함수는 deadline_date가 명시된 공고의 마감일 초과만 처리하는 보조 수단.
+
+    반환: 비활성화된 공고 수
+    """
+    cur = conn.execute(
         """
         UPDATE jobs
         SET is_active = 0, updated_at = CURRENT_TIMESTAMP
@@ -158,16 +184,4 @@ def deactivate_expired_jobs(conn: sqlite3.Connection) -> dict[str, int]:
           AND deadline_date < date('now')
         """
     )
-    # 2) 마감일 없이 7일 이상 미발견 공고
-    cur_stale = conn.execute(
-        """
-        UPDATE jobs
-        SET is_active = 0, updated_at = CURRENT_TIMESTAMP
-        WHERE is_active = 1
-          AND updated_at < datetime('now', '-7 days')
-        """
-    )
-    return {
-        "by_deadline": cur_deadline.rowcount,
-        "by_staleness": cur_stale.rowcount,
-    }
+    return cur.rowcount

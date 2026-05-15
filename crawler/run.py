@@ -8,6 +8,7 @@ import argparse
 import logging
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests as _requests
@@ -15,7 +16,10 @@ import requests as _requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from crawler import WantedCrawler, SaraminCrawler, JobKoreaCrawler
-from db.connection import init_db, get_conn, upsert_job, insert_skills, deactivate_expired_jobs
+from db.connection import (
+    init_db, get_conn, upsert_job, insert_skills,
+    deactivate_unseen_jobs, deactivate_expired_jobs,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,9 +108,12 @@ def run_crawler(source: str, max_pages: int) -> dict:
     }
     CrawlerClass = crawlers[source]
     crawler = CrawlerClass()
+
+    # 크롤 시작 시각 기록 (UTC) — 이 시각보다 updated_at이 이전인 공고 = 오늘 미발견
+    crawl_start = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     jobs = crawler.crawl_all_categories(max_pages=max_pages)
 
-    stats = {"found": len(jobs), "inserted": 0, "updated": 0, "errors": 0}
+    stats = {"found": len(jobs), "inserted": 0, "updated": 0, "deactivated": 0, "errors": 0}
 
     with get_conn() as conn:
         log_id = conn.execute(
@@ -123,6 +130,9 @@ def run_crawler(source: str, max_pages: int) -> dict:
                 except Exception as e:
                     logger.error(f"DB 저장 실패: {e} — {job.source_id}")
                     stats["errors"] += 1
+
+            # 오늘 크롤에서 발견 안 된 공고 즉시 비활성화
+            stats["deactivated"] = deactivate_unseen_jobs(conn, source, crawl_start)
 
             conn.execute(
                 """
@@ -171,23 +181,15 @@ def main():
             f"발견 {stats['found']}건 / "
             f"신규 {stats.get('inserted', 0)}건 / "
             f"업데이트 {stats.get('updated', 0)}건 / "
+            f"당일 미발견 비활성화 {stats.get('deactivated', 0)}건 / "
             f"오류 {stats['errors']}건 ==="
         )
 
-    # 전체 크롤 완료 후 만료 공고 비활성화 + URL 링크 검증
+    # 마감일 초과 공고 비활성화 (deadline_date 명시된 공고 한정)
     with get_conn() as conn:
-        expired = deactivate_expired_jobs(conn)
-        logger.info(
-            f"만료 공고 비활성화 — "
-            f"마감일 초과: {expired['by_deadline']}건, "
-            f"7일 미발견: {expired['by_staleness']}건"
-        )
-        link_stats = validate_job_links(conn, max_checks=30, delay=1.5)
-    logger.info(
-        f"URL 링크 검증 — "
-        f"검사: {link_stats['checked']}건, "
-        f"링크 만료 비활성화: {link_stats['deactivated']}건"
-    )
+        n_deadline = deactivate_expired_jobs(conn)
+    if n_deadline:
+        logger.info(f"마감일 초과 비활성화: {n_deadline}건")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 from db.connection import (
     init_db, get_conn, upsert_job, insert_skills,
     _is_cross_site_duplicate, _titles_are_duplicate,
-    deactivate_expired_jobs,
+    deactivate_unseen_jobs, deactivate_expired_jobs,
 )
 from crawler.run import validate_job_links
 
@@ -295,70 +295,102 @@ class TestValidateJobLinks:
         assert "deactivated" in result
 
 
+# ── deactivate_unseen_jobs ────────────────────────────────────────
+
+class TestDeactivateUnseenJobs:
+    def test_deactivates_job_not_seen_in_crawl(self):
+        """크롤 시작 전 updated_at → 오늘 미발견 공고 비활성화."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_site="wanted", source_id="1"))
+        conn.execute("UPDATE jobs SET updated_at='2020-01-01 00:00:00' WHERE source_id='1'")
+        conn.commit()
+
+        count = deactivate_unseen_jobs(conn, "wanted", "2025-01-01 09:00:00")
+        conn.commit()
+
+        assert count == 1
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='1'").fetchone()
+        assert row["is_active"] == 0
+
+    def test_keeps_job_seen_in_crawl(self):
+        """크롤 시작 이후 updated_at → 활성 유지."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_site="wanted", source_id="2"))
+        conn.commit()
+
+        # crawl_start를 과거로 → 현재 updated_at(≈now)이 이후임
+        count = deactivate_unseen_jobs(conn, "wanted", "2020-01-01 00:00:00")
+        conn.commit()
+
+        assert count == 0
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='2'").fetchone()
+        assert row["is_active"] == 1
+
+    def test_only_affects_matching_source(self):
+        """다른 source_site 공고는 영향 없음."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_site="wanted",  source_id="3"))
+        upsert_job(conn, _sample_job(source_site="saramin", source_id="4"))
+        conn.execute("UPDATE jobs SET updated_at='2020-01-01 00:00:00'")
+        conn.commit()
+
+        count = deactivate_unseen_jobs(conn, "wanted", "2025-01-01 09:00:00")
+        conn.commit()
+
+        assert count == 1
+        assert conn.execute("SELECT is_active FROM jobs WHERE source_id='3'").fetchone()["is_active"] == 0
+        assert conn.execute("SELECT is_active FROM jobs WHERE source_id='4'").fetchone()["is_active"] == 1
+
+    def test_already_inactive_not_counted(self):
+        """이미 비활성인 공고는 카운트 제외."""
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_site="wanted", source_id="5"))
+        conn.execute("UPDATE jobs SET is_active=0, updated_at='2020-01-01' WHERE source_id='5'")
+        conn.commit()
+
+        count = deactivate_unseen_jobs(conn, "wanted", "2025-01-01 09:00:00")
+        assert count == 0
+
+    def test_returns_int(self):
+        conn = _make_in_memory_conn()
+        result = deactivate_unseen_jobs(conn, "wanted", "2025-01-01 09:00:00")
+        assert isinstance(result, int)
+
+
 # ── deactivate_expired_jobs ───────────────────────────────────────
 
 class TestDeactivateExpiredJobs:
     def test_deactivates_past_deadline(self):
         """마감일이 지난 공고는 비활성화."""
         conn = _make_in_memory_conn()
-        upsert_job(conn, _sample_job(source_id="1", deadline_date="2020-01-01"))
+        upsert_job(conn, _sample_job(source_id="10", deadline_date="2020-01-01"))
         conn.commit()
-        result = deactivate_expired_jobs(conn)
+        count = deactivate_expired_jobs(conn)
         conn.commit()
-        assert result["by_deadline"] >= 1
-        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='1'").fetchone()
+        assert count >= 1
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='10'").fetchone()
         assert row["is_active"] == 0
 
     def test_keeps_future_deadline_active(self):
         """마감일이 아직 남은 공고는 유지."""
         conn = _make_in_memory_conn()
-        upsert_job(conn, _sample_job(source_id="2", deadline_date="2099-12-31"))
+        upsert_job(conn, _sample_job(source_id="11", deadline_date="2099-12-31"))
         conn.commit()
         deactivate_expired_jobs(conn)
         conn.commit()
-        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='2'").fetchone()
+        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='11'").fetchone()
         assert row["is_active"] == 1
 
-    def test_deactivates_stale_no_deadline(self):
-        """마감일 없이 7일 이상 발견되지 않은 공고는 비활성화."""
+    def test_already_inactive_not_counted(self):
+        """이미 비활성인 공고는 카운트에 포함되지 않음."""
         conn = _make_in_memory_conn()
-        upsert_job(conn, _sample_job(source_id="3", deadline_date=None))
+        upsert_job(conn, _sample_job(source_id="12", deadline_date="2020-01-01"))
+        conn.execute("UPDATE jobs SET is_active=0 WHERE source_id='12'")
         conn.commit()
-        # updated_at을 8일 전으로 강제 설정
-        conn.execute(
-            "UPDATE jobs SET updated_at = datetime('now', '-8 days') WHERE source_id='3'"
-        )
-        conn.commit()
-        result = deactivate_expired_jobs(conn)
-        conn.commit()
-        assert result["by_staleness"] >= 1
-        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='3'").fetchone()
-        assert row["is_active"] == 0
+        count = deactivate_expired_jobs(conn)
+        assert count == 0
 
-    def test_keeps_recent_no_deadline_active(self):
-        """마감일 없어도 최근(1일)에 발견된 공고는 유지."""
-        conn = _make_in_memory_conn()
-        upsert_job(conn, _sample_job(source_id="4", deadline_date=None))
-        conn.commit()
-        deactivate_expired_jobs(conn)
-        conn.commit()
-        row = conn.execute("SELECT is_active FROM jobs WHERE source_id='4'").fetchone()
-        assert row["is_active"] == 1
-
-    def test_already_inactive_not_double_counted(self):
-        """이미 비활성인 공고는 카운트에 포함되지 않음 (rowcount=0)."""
-        conn = _make_in_memory_conn()
-        upsert_job(conn, _sample_job(source_id="5", deadline_date="2020-01-01"))
-        conn.execute("UPDATE jobs SET is_active=0 WHERE source_id='5'")
-        conn.commit()
-        result = deactivate_expired_jobs(conn)
-        # 이미 0인 행은 UPDATE 영향 없음
-        assert result["by_deadline"] == 0
-        assert result["by_staleness"] == 0
-
-    def test_returns_correct_counts(self):
-        """반환 딕셔너리에 by_deadline / by_staleness 키가 있음."""
+    def test_returns_int(self):
         conn = _make_in_memory_conn()
         result = deactivate_expired_jobs(conn)
-        assert "by_deadline" in result
-        assert "by_staleness" in result
+        assert isinstance(result, int)
