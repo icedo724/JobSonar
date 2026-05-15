@@ -1,9 +1,8 @@
 """사이드바 메트릭 + KPI 카드 콜백."""
-import pandas as pd
 from dash import Input, Output, html
 
-from analysis import new_jobs_count, salary_by_category
-from dashboard.context import JOBS_DF, SKILLS_DF, BLUE
+from analysis import new_jobs_count
+from dashboard.context import JOBS_DF
 from dashboard.utils import apply_filter, kpi_card
 
 
@@ -41,27 +40,12 @@ def register(app) -> None:
     )
     def update_kpis(categories, sources, industries, emp_types):
         df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
-        sf = apply_filter(SKILLS_DF, categories, sources)
 
-        top_skill = "—"
-        if not sf.empty:
-            top_skill = sf.groupby("skill_name").size().idxmax()
-
-        sal_df = salary_by_category(df)
-        avg_sal = (
-            f"{int(sal_df['salary_mid'].median()):,}만원"
-            if not sal_df.empty else "정보 없음"
-        )
-
-        today = pd.Timestamp.now().normalize()
-        deadline_soon = 0
-        if "deadline_date" in df.columns:
-            d = df["deadline_date"].dropna()
-            deadline_soon = int(((d >= today) & (d <= today + pd.Timedelta(days=7))).sum())
+        # 소스별 공고 수
+        src_counts = {s: int((df["source_site"] == s).sum()) for s in ["wanted", "saramin", "jobkorea"]}
+        src_labels = {"wanted": "원티드", "saramin": "사람인", "jobkorea": "잡코리아"}
 
         return [
             kpi_card("활성 공고", f"{len(df):,}건"),
-            kpi_card("마감 임박 7일", f"{deadline_soon:,}건"),
-            kpi_card("가장 요구된 스킬", top_skill),
-            kpi_card("연봉 중간값", avg_sal),
+            *[kpi_card(src_labels[s], f"{src_counts[s]:,}건") for s in src_labels],
         ]
