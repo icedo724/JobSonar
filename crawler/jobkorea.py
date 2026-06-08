@@ -56,15 +56,24 @@ def _normalize_employment_jk(text: str | None) -> str | None:
 
 
 def _parse_deadline_jk(text: str | None) -> date | None:
-    """'05/01(금) 마감', '상시채용' 파싱."""
+    """'05/01(금) 마감', '상시채용' 파싱.
+
+    잡코리아 마감일은 연도 없이 MM/DD만 제공 → 현재 연도로 가정하되,
+    그 날짜가 과거로 한참 지나 있으면(연말→연초 경계) 다음 해로 보정한다.
+    예: 12월에 본 '01/15'는 내년 마감.
+    """
     if not text or "상시" in text or "채용" in text:
         return None
     m = re.search(r"(\d{2})/(\d{2})", text)
     if not m:
         return None
     try:
-        year = datetime.now().year
-        return date(year, int(m.group(1)), int(m.group(2)))
+        today = date.today()
+        candidate = date(today.year, int(m.group(1)), int(m.group(2)))
+        # 180일 이상 과거면 연도 경계로 판단해 다음 해로 보정
+        if (today - candidate).days > 180:
+            candidate = date(today.year + 1, int(m.group(1)), int(m.group(2)))
+        return candidate
     except ValueError:
         return None
 
@@ -123,6 +132,30 @@ class JobKoreaCrawler(BaseCrawler):
 
         logger.info(f"[jobkorea] {category} 총 {len(jobs)}건 수집 완료")
         return jobs
+
+    def enrich(self, job: JobItem) -> None:
+        """상세 페이지(robots 허용)에서 본문·스킬을 보강 (best-effort)."""
+        try:
+            soup = self._soup(JOBKOREA_JOB_URL.format(job_id=job.source_id))
+        except Exception as e:
+            logger.warning(f"[jobkorea] 상세 조회 실패 job_id={job.source_id}: {e}")
+            return
+
+        # 본문: meta[name=description]는 마크업 해시 변경에 무관하게 안정적
+        meta = soup.find("meta", attrs={"name": "description"})
+        desc = (meta.get("content", "").strip() if meta else "")
+        if not desc:
+            # 폴백: 상세 본문 영역으로 추정되는 텍스트 일부
+            body = soup.select_one("[class*='detail'], [class*='content'], article")
+            desc = body.get_text(" ", strip=True) if body else ""
+        if desc:
+            job.description = desc[: self.DESC_MAX_LEN]
+
+        # 스킬: 상세 페이지 전체 텍스트에서 추가 추출 후 병합
+        page_text = soup.get_text(" ", strip=True)
+        extra = [normalize_skill(s) for s in extract_skills_from_text(page_text)]
+        if extra:
+            job.skills = sorted(set(job.skills) | set(s for s in extra if s))
 
     def _parse_card(self, card: Tag, job_id: str, category: str) -> JobItem | None:
         try:

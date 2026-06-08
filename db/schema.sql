@@ -17,10 +17,12 @@ CREATE TABLE IF NOT EXISTS jobs (
     experience_max  INTEGER,                    -- 최대 경력 (년), NULL = 무관
     salary_min      INTEGER,                    -- 연봉 하한 (만원)
     salary_max      INTEGER,                    -- 연봉 상한 (만원)
+    description     TEXT,                       -- 상세 본문 요약 (원티드 API·잡코리아 상세에서 보강)
     posted_date     DATE,                       -- 공고 게시일
     deadline_date   DATE,                       -- 마감일
     is_active       BOOLEAN NOT NULL DEFAULT 1,
     is_duplicate    BOOLEAN NOT NULL DEFAULT 0, -- 타 사이트 동일 공고 중복 여부
+    duplicate_of    INTEGER,                    -- 중복일 때 대표(canonical) 공고 id → 그룹화 표시용
     collected_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

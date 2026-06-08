@@ -45,12 +45,15 @@ GitHub Actions (매일 오전 10시)
   ├─ 원티드 공개 REST API 수집
   ├─ 사람인 HTML 파싱 (목록 페이지만, robots.txt 준수)
   ├─ 잡코리아 HTML 파싱
-  ├─ SQLite DB 업데이트 (upsert, 중복 공고 처리)
+  ├─ 관련성 필터 (데이터 직군과 무관한 공고 제외)
+  ├─ 신규 공고 상세 보강 (원티드 API·잡코리아 상세 → 본문·스킬·지역·경력)
+  ├─ SQLite DB 업데이트 (upsert, 회사명 정규화 기반 교차 플랫폼 중복 처리)
+  ├─ 만료 처리 (당일 미발견 mark-and-sweep + 마감일 초과 + 링크 HEAD 검증)
   └─ HF Dataset(mininiming/jobsonar-data)에 DB 업로드
 
 HF Space 앱 시작 시
   ├─ HF Dataset에서 jobsonar.db 다운로드
-  └─ Dash 대시보드 렌더링
+  └─ Dash 대시보드 렌더링 (상세 본문 펼치기·멀티플랫폼 배지·연봉/마감일 표기)
 ```
 
 ---
@@ -81,11 +84,13 @@ python dashboard/app.py
 
 ## 플렛폼 별 정책
 
-| 사이트 | 방식 | robots.txt |
-|--------|------|-----------|
-| 원티드 | 공개 REST API | 문제 없음 |
-| 사람인 | 목록 페이지 HTML | 상세 페이지 Disallow → relay URL 사용 |
-| 잡코리아 | 목록 페이지 HTML | 허용 확인 |
+| 사이트 | 방식 | 상세 보강 | robots.txt |
+|--------|------|-----------|-----------|
+| 원티드 | 공개 REST API | 공고 상세 API (본문·스킬 태그) | 문제 없음 |
+| 사람인 | 목록 페이지 HTML | 미수집 (정책 준수) | 상세 페이지 Disallow → relay URL 사용 |
+| 잡코리아 | 목록 페이지 HTML | 상세 페이지 (본문·스킬) | 허용 확인 |
+
+> 상세 보강은 **신규 공고에 한해** 수행해 요청 수를 제한하며, 실패해도 목록 수집 결과를 훼손하지 않습니다(best-effort).
 
 요청 간 1.5~4초 딜레이 적용.
 

@@ -215,7 +215,7 @@ def load_jobs_for_board(conn: sqlite3.Connection) -> pd.DataFrame:
         SELECT j.id, j.title, j.company_name, j.job_category,
                j.industry, j.employment_type, j.source_site, j.url, j.location,
                j.experience_min, j.experience_max,
-               j.salary_min, j.salary_max,
+               j.salary_min, j.salary_max, j.description,
                j.posted_date, j.deadline_date, j.collected_at
         FROM jobs j
         WHERE j.is_active = 1 AND j.is_duplicate = 0
@@ -238,4 +238,19 @@ def load_jobs_for_board(conn: sqlite3.Connection) -> pd.DataFrame:
         .apply(lambda x: " · ".join(sorted(x)))
         .reset_index(name="skills")
     )
-    return jobs.merge(skill_agg, left_on="id", right_on="job_id", how="left").drop(columns="job_id")
+    jobs = jobs.merge(skill_agg, left_on="id", right_on="job_id", how="left").drop(columns="job_id")
+
+    # 중복 그룹화: 같은 공고가 올라온 다른 플랫폼들을 대표 공고에 묶어 표시
+    dups = pd.read_sql_query(
+        """
+        SELECT duplicate_of AS cid, GROUP_CONCAT(DISTINCT source_site) AS extra_sources
+        FROM jobs
+        WHERE duplicate_of IS NOT NULL AND is_active = 1
+        GROUP BY duplicate_of
+        """,
+        conn,
+    )
+    jobs = jobs.merge(dups, left_on="id", right_on="cid", how="left").drop(
+        columns="cid", errors="ignore"
+    )
+    return jobs

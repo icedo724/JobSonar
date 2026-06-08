@@ -138,6 +138,43 @@ SKILL_ALIASES: dict[str, str] = {
 }
 
 
+# ── 관련성 필터 ───────────────────────────────────────────────────
+# 제목에 아래 토큰이 하나라도 있으면 데이터 직군 공고로 간주 (정규화: 소문자·공백제거 후 부분일치)
+RELEVANT_TOKENS: tuple[str, ...] = (
+    "데이터", "data", "분석", "analyst", "analytics", "애널리", "bi",
+    "엔지니어", "engineer", "사이언", "scientist", "science",
+    "머신러닝", "machinelearning", "딥러닝", "deeplearning",
+    "ml", "mlops", "ai", "인공지능", "빅데이터", "bigdata",
+    "추천", "추론", "모델링", "modeling", "llm",
+)
+# 제목에 아래 토큰이 있고 위 RELEVANT_TOKENS가 전혀 없으면 무관 공고로 판단해 제외
+# (키워드 검색이 끌어오는 영업·세무·간호 등 명백한 오탐 차단)
+IRRELEVANT_TOKENS: tuple[str, ...] = (
+    "영업", "세무", "회계", "경리", "총무", "간호", "요양", "물리치료",
+    "조리", "주방", "배송", "운전", "기사모집", "생산직", "용접", "도장",
+    "미용", "헤어", "네일", "경비", "청소", "환경미화", "텔레마케팅",
+    "콜센터", "상담원", "판매", "매장", "서빙", "바리스타", "강사", "교사",
+    "유치원", "보육", "간병", "방문판매", "보험설계",
+)
+
+
+def is_relevant_job(title: str) -> bool:
+    """제목 기준으로 데이터 직군 공고인지 판정.
+
+    정책(보수적): 무관 토큰이 있고 관련 토큰이 하나도 없을 때만 제외한다.
+    검색 키워드 자체가 직군 기반이라 대부분 관련 공고이므로,
+    명백한 오탐(영업·세무·간호 등)만 걸러 false drop을 최소화한다.
+    """
+    t = re.sub(r"\s+", "", (title or "").lower())
+    if not t:
+        return False
+    has_relevant = any(tok in t for tok in RELEVANT_TOKENS)
+    if has_relevant:
+        return True
+    has_irrelevant = any(tok in t for tok in IRRELEVANT_TOKENS)
+    return not has_irrelevant
+
+
 def normalize_skill(raw: str) -> str:
     """스킬 문자열을 표준명으로 변환."""
     key = raw.lower().strip()
@@ -175,6 +212,7 @@ class JobItem:
     experience_max: int | None = None
     salary_min: int | None = None
     salary_max: int | None = None
+    description: str | None = None
     posted_date: date | None = None
     deadline_date: date | None = None
 
@@ -193,6 +231,7 @@ class JobItem:
             "experience_max": self.experience_max,
             "salary_min": self.salary_min,
             "salary_max": self.salary_max,
+            "description": self.description,
             "posted_date": self.posted_date.isoformat() if self.posted_date else None,
             "deadline_date": self.deadline_date.isoformat() if self.deadline_date else None,
         }
@@ -237,6 +276,18 @@ class BaseCrawler(ABC):
     def crawl(self, category: str, max_pages: int = 10) -> list[JobItem]:
         """주어진 직군 카테고리의 공고를 수집해 반환."""
         ...
+
+    def enrich(self, job: JobItem) -> None:
+        """상세 페이지에서 본문·스킬·지역·경력 등을 보강 (in-place 수정).
+
+        기본 구현은 no-op. 상세 수집이 정책상 허용되는 사이트(원티드 API·잡코리아)만
+        오버라이드한다. 신규 공고에 대해서만 호출해 요청 수를 제한한다.
+        모든 보강은 best-effort — 실패해도 목록 수집 결과를 훼손하지 않는다.
+        """
+        return None
+
+    # 상세 본문 저장 시 최대 길이 (UI 표시·DB 용량 보호)
+    DESC_MAX_LEN: int = 1200
 
     def crawl_all_categories(self, max_pages: int = 10) -> list[JobItem]:
         """CATEGORY_MAP의 모든 직군을 순서대로 수집해 반환."""

@@ -93,3 +93,18 @@ def salary_label(mn, mx) -> str:
         return "연봉 협의"
     mx_valid = mx is not None and not (isinstance(mx, float) and pd.isna(mx))
     return f"{int(mn):,}~{int(mx):,}만원" if mx_valid else f"{int(mn):,}만원~"
+
+
+def deadline_label(deadline) -> str:
+    """마감일을 'D-n' / '오늘 마감' 형태로 표기. 없으면 빈 문자열."""
+    if deadline is None or (isinstance(deadline, float) and pd.isna(deadline)):
+        return ""
+    ts = pd.to_datetime(deadline, errors="coerce")
+    if pd.isna(ts):
+        return ""
+    days = (ts.normalize() - pd.Timestamp.now().normalize()).days
+    if days < 0:
+        return ""          # 이미 지난 마감일은 표기하지 않음
+    if days == 0:
+        return "오늘 마감"
+    return f"D-{days}"

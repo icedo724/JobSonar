@@ -170,6 +170,35 @@ body {
 .job-company { font-size: 0.84rem; font-weight: 600; color: #1352f1; margin-top: 3px; }
 .job-meta    { font-size: 0.78rem; color: #8b95a1; margin-top: 6px; }
 .job-skills  { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px; }
+.job-badges  { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+
+/* ── Job Detail (펼치기) ───────────────────────────────────── */
+.job-detail { margin-top: 10px; }
+.job-detail-summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #1352f1;
+    list-style: none;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.job-detail-summary::-webkit-details-marker { display: none; }
+.job-detail-summary::before { content: '▸'; font-size: 0.7rem; }
+.job-detail[open] .job-detail-summary::before { content: '▾'; }
+.job-detail-body {
+    margin-top: 8px;
+    padding: 12px 14px;
+    background: #f8faff;
+    border: 1px solid #eef2ff;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: #4a5568;
+    white-space: pre-line;
+}
 
 /* ── Skill Badge ──────────────────────────────────────────── */
 .skill-badge {

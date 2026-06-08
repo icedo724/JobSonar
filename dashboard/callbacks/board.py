@@ -5,7 +5,7 @@ from dash import Input, Output, State, html, ctx
 
 from analysis import normalize_location
 from dashboard.context import BOARD_DF
-from dashboard.utils import apply_filter, source_badge, exp_label
+from dashboard.utils import apply_filter, source_badge, exp_label, salary_label, deadline_label
 
 
 def register(app) -> None:
@@ -126,12 +126,31 @@ def register(app) -> None:
                 className="job-skills",
             )
 
-            # 메타: 지역 · 경력 (연봉 제거)
+            # 메타: 지역 · 경력 · 연봉 · 근무형태 · 마감일 (값 있는 것만)
+            sal = salary_label(row.get("salary_min"), row.get("salary_max"))
+            ddl = deadline_label(row.get("deadline_date"))
             meta_parts = [
                 normalize_location(row.get("location")) or "",
                 exp_label(row.get("experience_min"), row.get("experience_max")),
+                sal if sal != "연봉 협의" else "",
+                row.get("employment_type") if pd.notna(row.get("employment_type")) else "",
+                ddl,
             ]
             meta = " · ".join(filter(None, meta_parts))
+
+            # 플랫폼 배지: 대표 + 같은 공고가 올라온 다른 플랫폼
+            extra = str(row.get("extra_sources") or "")
+            also = [s for s in extra.split(",") if s and s != row["source_site"]]
+            badges = [source_badge(row["source_site"])] + [source_badge(s) for s in also]
+
+            # 상세 본문: 있으면 펼치기로 제공 (페이지 이동 없이 미리보기)
+            desc = row.get("description")
+            detail_el = None
+            if isinstance(desc, str) and desc.strip():
+                detail_el = html.Details([
+                    html.Summary("상세 내용 보기", className="job-detail-summary"),
+                    html.P(desc.strip(), className="job-detail-body"),
+                ], className="job-detail")
 
             cards.append(html.Div([
                 html.Div([
@@ -139,10 +158,11 @@ def register(app) -> None:
                         html.A(row["title"], href=row["url"], target="_blank", className="job-title"),
                         html.P(row["company_name"], className="job-company"),
                     ]),
-                    source_badge(row["source_site"]),
+                    html.Div(badges, className="job-badges"),
                 ], style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start"}),
                 html.P(meta, className="job-meta"),
                 skills_el,
+                detail_el,
             ], className="job-card"))
 
         count_text = f"총 {total:,}건"

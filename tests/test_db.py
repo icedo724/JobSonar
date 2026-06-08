@@ -10,7 +10,8 @@ import pytest
 from unittest.mock import MagicMock
 from db.connection import (
     init_db, get_conn, upsert_job, insert_skills,
-    _is_cross_site_duplicate, _titles_are_duplicate,
+    _is_cross_site_duplicate, _find_cross_site_duplicate, _titles_are_duplicate,
+    _normalize_company,
     deactivate_unseen_jobs, deactivate_expired_jobs,
 )
 from crawler.run import validate_job_links
@@ -159,6 +160,66 @@ class TestCrossSiteDuplicate:
             _sample_job(source_site="wanted", source_id="2"),
         )
         assert is_dup is False
+
+
+# ── _normalize_company ────────────────────────────────────────────
+
+class TestNormalizeCompany:
+    def test_strips_korean_legal_form(self):
+        assert _normalize_company("(주)카카오") == _normalize_company("카카오")
+        assert _normalize_company("주식회사 토스") == _normalize_company("토스")
+
+    def test_strips_english_legal_form(self):
+        assert _normalize_company("Kakao Corp.") == "kakao"
+        assert _normalize_company("Naver Inc.") == "naver"
+        assert _normalize_company("Toss Co., Ltd.") == "toss"
+
+    def test_ignores_spacing_and_case(self):
+        assert _normalize_company("LINE Plus") == _normalize_company("lineplus")
+
+    def test_empty(self):
+        assert _normalize_company("") == ""
+        assert _normalize_company(None) == ""
+
+
+class TestFindCrossSiteDuplicateReturnsCanonical:
+    def test_returns_existing_job_id(self):
+        conn = _make_in_memory_conn()
+        cid, _ = upsert_job(conn, _sample_job(source_site="wanted", source_id="1"))
+        found = _find_cross_site_duplicate(
+            conn, _sample_job(source_site="saramin", source_id="99"),
+        )
+        assert found == cid
+
+    def test_matches_despite_company_legal_form(self):
+        """(주) 표기 차이가 있어도 같은 회사로 인식."""
+        conn = _make_in_memory_conn()
+        cid, _ = upsert_job(conn, _sample_job(
+            source_site="wanted", source_id="1", company_name="(주)테스트컴퍼니"))
+        found = _find_cross_site_duplicate(
+            conn, _sample_job(
+                source_site="saramin", source_id="99", company_name="테스트컴퍼니"),
+        )
+        assert found == cid
+
+    def test_returns_none_when_no_match(self):
+        conn = _make_in_memory_conn()
+        upsert_job(conn, _sample_job(source_site="wanted", source_id="1"))
+        found = _find_cross_site_duplicate(
+            conn, _sample_job(source_site="saramin", source_id="99", title="전혀 다른 공고"),
+        )
+        assert found is None
+
+    def test_upsert_records_duplicate_of(self):
+        """중복 공고 insert 시 duplicate_of에 대표 id가 기록됨."""
+        conn = _make_in_memory_conn()
+        cid, _ = upsert_job(conn, _sample_job(source_site="wanted", source_id="1"))
+        dup_id, _ = upsert_job(conn, _sample_job(source_site="saramin", source_id="99"))
+        row = conn.execute(
+            "SELECT is_duplicate, duplicate_of FROM jobs WHERE id=?", (dup_id,)
+        ).fetchone()
+        assert row["is_duplicate"] == 1
+        assert row["duplicate_of"] == cid
 
 
 # ── _titles_are_duplicate (퍼지 매칭) ─────────────────────────────

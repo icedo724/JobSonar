@@ -16,6 +16,7 @@ import requests as _requests
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from crawler import WantedCrawler, SaraminCrawler, JobKoreaCrawler
+from crawler.base import is_relevant_job
 from db.connection import (
     init_db, get_conn, upsert_job, insert_skills,
     deactivate_unseen_jobs, deactivate_expired_jobs,
@@ -34,6 +35,15 @@ _CRAWL_UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/122.0.0.0 Safari/537.36"
 )
+
+
+def _job_exists(conn, source_site: str, source_id: str) -> bool:
+    """해당 공고가 이미 DB에 있는지 여부 (신규 공고만 상세 보강하기 위함)."""
+    row = conn.execute(
+        "SELECT 1 FROM jobs WHERE source_site=? AND source_id=?",
+        (source_site, source_id),
+    ).fetchone()
+    return row is not None
 
 
 def validate_job_links(
@@ -111,9 +121,16 @@ def run_crawler(source: str, max_pages: int) -> dict:
 
     # 크롤 시작 시각 기록 (UTC) — 이 시각보다 updated_at이 이전인 공고 = 오늘 미발견
     crawl_start = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    jobs = crawler.crawl_all_categories(max_pages=max_pages)
+    raw_jobs = crawler.crawl_all_categories(max_pages=max_pages)
 
-    stats = {"found": len(jobs), "inserted": 0, "updated": 0, "deactivated": 0, "errors": 0}
+    # 관련성 필터: 키워드 검색이 끌어온 무관 공고(영업·세무 등) 제외
+    jobs = [j for j in raw_jobs if is_relevant_job(j.title)]
+    skipped = len(raw_jobs) - len(jobs)
+    if skipped:
+        logger.info(f"[{source}] 관련성 필터로 {skipped}건 제외")
+
+    stats = {"found": len(jobs), "inserted": 0, "updated": 0,
+             "deactivated": 0, "errors": 0, "skipped_irrelevant": skipped}
 
     with get_conn() as conn:
         log_id = conn.execute(
@@ -124,6 +141,12 @@ def run_crawler(source: str, max_pages: int) -> dict:
         try:
             for job in jobs:
                 try:
+                    # 신규 공고만 상세 페이지로 보강 (요청 수 제한) — best-effort
+                    if not _job_exists(conn, job.source_site, job.source_id):
+                        try:
+                            crawler.enrich(job)
+                        except Exception as e:
+                            logger.warning(f"[{source}] 상세 보강 실패 (무시): {e}")
                     job_id, action = upsert_job(conn, job.to_db_dict())
                     insert_skills(conn, job_id, job.skills)
                     stats[action] = stats.get(action, 0) + 1
@@ -181,15 +204,23 @@ def main():
             f"발견 {stats['found']}건 / "
             f"신규 {stats.get('inserted', 0)}건 / "
             f"업데이트 {stats.get('updated', 0)}건 / "
+            f"무관 제외 {stats.get('skipped_irrelevant', 0)}건 / "
             f"당일 미발견 비활성화 {stats.get('deactivated', 0)}건 / "
             f"오류 {stats['errors']}건 ==="
         )
 
-    # 마감일 초과 공고 비활성화 (deadline_date 명시된 공고 한정)
     with get_conn() as conn:
+        # 마감일 초과 공고 비활성화 (deadline_date 명시된 공고 한정)
         n_deadline = deactivate_expired_jobs(conn)
-    if n_deadline:
-        logger.info(f"마감일 초과 비활성화: {n_deadline}건")
+        if n_deadline:
+            logger.info(f"마감일 초과 비활성화: {n_deadline}건")
+
+        # 활성 공고 URL 유효성 검사 (HTTP HEAD) — 만료 링크 비활성화
+        link_stats = validate_job_links(conn, max_checks=60)
+        logger.info(
+            f"링크 검증 — 검사 {link_stats['checked']}건 / "
+            f"만료 비활성화 {link_stats['deactivated']}건"
+        )
 
 
 if __name__ == "__main__":

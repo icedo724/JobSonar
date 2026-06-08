@@ -15,7 +15,7 @@ def init_db(db_path: Path = DB_PATH) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-        # is_duplicate 컬럼 마이그레이션 (기존 DB 호환)
+        # 컬럼 마이그레이션 (기존 DB 호환)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(jobs)")]
         if "is_duplicate" not in cols:
             conn.execute("ALTER TABLE jobs ADD COLUMN is_duplicate BOOLEAN NOT NULL DEFAULT 0")
@@ -23,6 +23,12 @@ def init_db(db_path: Path = DB_PATH) -> None:
             conn.execute("ALTER TABLE jobs ADD COLUMN industry TEXT")
         if "employment_type" not in cols:
             conn.execute("ALTER TABLE jobs ADD COLUMN employment_type TEXT")
+        if "description" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN description TEXT")
+        if "duplicate_of" not in cols:
+            conn.execute("ALTER TABLE jobs ADD COLUMN duplicate_of INTEGER")
+        # duplicate_of 인덱스는 컬럼 마이그레이션 이후에 생성 (기존 DB 호환)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_dup_of ON jobs(duplicate_of)")
         conn.commit()
 
 
@@ -41,6 +47,27 @@ def get_conn(db_path: Path = DB_PATH):
         raise
     finally:
         conn.close()
+
+
+# 회사명 정규화 시 제거할 법인격·접미어 패턴
+_COMPANY_NOISE = re.compile(
+    r'\(주\)|\(유\)|\(재\)|\(사\)|㈜|㈐|주식회사|유한회사|유한책임회사|'
+    r'\bco\.?,?\s*ltd\.?|\bltd\.?|\binc\.?|\bcorp\.?|\bcorporation\b|\bllc\b|\bgmbh\b',
+    re.IGNORECASE,
+)
+
+
+def _normalize_company(s: str) -> str:
+    """중복 감지용 회사명 정규화.
+    법인격 표기((주)·주식회사·Inc·Co.,Ltd 등) 제거 → 소문자 → 공백·특수문자 제거.
+    예: "(주)카카오" → "카카오", "Kakao Corp." → "kakao"
+    """
+    if not s:
+        return ""
+    s = _COMPANY_NOISE.sub(" ", s)
+    s = s.lower()
+    s = re.sub(r'[^a-z0-9가-힣]', '', s)
+    return s
 
 
 def _normalize_title_for_dedup(s: str) -> str:
@@ -70,23 +97,38 @@ def _titles_are_duplicate(a: str, b: str) -> bool:
     return shorter in longer or SequenceMatcher(None, na, nb).ratio() >= 0.82
 
 
-def _is_cross_site_duplicate(conn: sqlite3.Connection, job: dict) -> bool:
-    """동일 회사 + 유사 제목의 공고가 다른 사이트에 이미 존재하면 True.
+def _find_cross_site_duplicate(conn: sqlite3.Connection, job: dict) -> int | None:
+    """다른 사이트에 동일 공고(같은 회사 + 유사 제목)가 이미 있으면 그 대표 공고 id 반환.
 
-    기존 완전 일치(lower+trim) → 퍼지 매칭(_titles_are_duplicate)으로 개선.
-    같은 회사의 후보 공고를 모두 가져와 Python 레벨에서 유사도 비교.
+    회사명은 _normalize_company()로 정규화해 "(주)카카오" ↔ "카카오" 같은 표기 차이를 흡수하고,
+    제목은 _titles_are_duplicate() 퍼지 매칭으로 비교한다.
+    같은 회사로 좁힌 뒤 Python 레벨에서 유사도를 판정한다.
     """
+    target_company = _normalize_company(job["company_name"])
+    if not target_company:
+        return None
+
     rows = conn.execute(
         """
-        SELECT title FROM jobs
-        WHERE lower(trim(company_name)) = lower(trim(?))
-          AND source_site               != ?
-          AND is_active                 = 1
-          AND is_duplicate              = 0
+        SELECT id, company_name, title FROM jobs
+        WHERE source_site  != ?
+          AND is_active    = 1
+          AND is_duplicate = 0
         """,
-        (job["company_name"], job["source_site"]),
+        (job["source_site"],),
     ).fetchall()
-    return any(_titles_are_duplicate(job["title"], row["title"]) for row in rows)
+
+    for row in rows:
+        if _normalize_company(row["company_name"]) != target_company:
+            continue
+        if _titles_are_duplicate(job["title"], row["title"]):
+            return row["id"]
+    return None
+
+
+def _is_cross_site_duplicate(conn: sqlite3.Connection, job: dict) -> bool:
+    """다른 사이트에 동일 공고가 존재하는지 여부 (bool 래퍼)."""
+    return _find_cross_site_duplicate(conn, job) is not None
 
 
 def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:
@@ -97,21 +139,26 @@ def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:
     ).fetchone()
 
     if existing is None:
-        is_dup = _is_cross_site_duplicate(conn, job)
+        canonical_id = _find_cross_site_duplicate(conn, job)
         cur = conn.execute(
             """
             INSERT INTO jobs (
                 source_site, source_id, url, title, company_name, job_category,
                 industry, employment_type, location, experience_min, experience_max,
-                salary_min, salary_max, posted_date, deadline_date, is_duplicate
+                salary_min, salary_max, description, posted_date, deadline_date,
+                is_duplicate, duplicate_of
             ) VALUES (
                 :source_site, :source_id, :url, :title, :company_name, :job_category,
                 :industry, :employment_type, :location, :experience_min, :experience_max,
-                :salary_min, :salary_max, :posted_date, :deadline_date, :is_duplicate
+                :salary_min, :salary_max, :description, :posted_date, :deadline_date,
+                :is_duplicate, :duplicate_of
             )
             """,
-            {**job, "is_duplicate": int(is_dup),
-             "industry": job.get("industry"), "employment_type": job.get("employment_type")},
+            {**job,
+             "industry": job.get("industry"), "employment_type": job.get("employment_type"),
+             "description": job.get("description"),
+             "is_duplicate": int(canonical_id is not None),
+             "duplicate_of": canonical_id},
         )
         return cur.lastrowid, "inserted"
 
@@ -121,10 +168,12 @@ def upsert_job(conn: sqlite3.Connection, job: dict) -> tuple[int, str]:
         SET title=:title, company_name=:company_name, is_active=1,
             industry=:industry, employment_type=:employment_type,
             salary_min=:salary_min, salary_max=:salary_max,
+            description=COALESCE(:description, description),
             deadline_date=:deadline_date, updated_at=CURRENT_TIMESTAMP
         WHERE source_site=:source_site AND source_id=:source_id
         """,
-        {**job, "industry": job.get("industry"), "employment_type": job.get("employment_type")},
+        {**job, "industry": job.get("industry"), "employment_type": job.get("employment_type"),
+         "description": job.get("description")},
     )
     return existing["id"], "updated"
 

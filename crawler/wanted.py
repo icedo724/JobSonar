@@ -123,6 +123,42 @@ class WantedCrawler(BaseCrawler):
             logger.warning(f"[wanted] 상세 조회 실패 job_id={job_id}: {e}")
             return None
 
+    def enrich(self, job: JobItem) -> None:
+        """상세 API로 본문·스킬·지역·경력을 보강 (best-effort)."""
+        detail = self.fetch_detail(job.source_id)
+        if not detail:
+            return
+
+        # 본문: intro·main_tasks·requirements·preferred_points·benefits 순서로 결합
+        d = detail.get("detail") or {}
+        sections = [
+            d.get("intro"), d.get("main_tasks"),
+            d.get("requirements"), d.get("preferred_points"), d.get("benefits"),
+        ]
+        text = "\n".join(s.strip() for s in sections if isinstance(s, str) and s.strip())
+        if text:
+            job.description = text[: self.DESC_MAX_LEN]
+
+        # 스킬: 상세의 skill_tags 우선 + 본문 텍스트에서 추가 추출
+        detail_skills = [
+            normalize_skill(t.get("title", ""))
+            for t in detail.get("skill_tags", [])
+            if t.get("title")
+        ]
+        if text:
+            detail_skills += extract_skills_from_text(text)
+        if detail_skills:
+            job.skills = sorted(set(job.skills) | set(s for s in detail_skills if s))
+
+        # 지역·경력: 목록에서 비었으면 상세로 채움
+        if not job.location:
+            job.location = (detail.get("address") or {}).get("location") or job.location
+        if job.experience_min is None:
+            exp = detail.get("annual_from")
+            if isinstance(exp, int):
+                job.experience_min = exp
+                job.experience_max = detail.get("annual_to") if isinstance(detail.get("annual_to"), int) else None
+
     def _parse_list_item(self, raw: dict, category: str) -> JobItem | None:
         try:
             job_id = str(raw["id"])

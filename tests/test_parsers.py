@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from crawler.base import normalize_skill, extract_skills_from_text, SKILL_ALIASES
+from crawler.base import normalize_skill, extract_skills_from_text, SKILL_ALIASES, is_relevant_job
 from crawler.wanted import _parse_salary, _parse_experience
 from crawler.saramin import _parse_salary_saramin, SaraminCrawler
 from crawler.jobkorea import _parse_experience_jk, _parse_deadline_jk, _normalize_employment_jk
@@ -74,6 +74,32 @@ class TestExtractSkillsFromText:
 
     def test_empty_text(self):
         assert extract_skills_from_text("") == []
+
+
+# ── is_relevant_job (관련성 필터) ─────────────────────────────────
+
+class TestIsRelevantJob:
+    def test_keeps_data_role(self):
+        assert is_relevant_job("데이터 분석가") is True
+        assert is_relevant_job("Senior Data Engineer") is True
+        assert is_relevant_job("ML 엔지니어 (경력)") is True
+
+    def test_drops_clear_mismatch(self):
+        """관련 토큰 없고 무관 토큰만 있으면 제외."""
+        assert is_relevant_job("영업관리 사원 모집") is False
+        assert is_relevant_job("간호조무사 채용") is False
+        assert is_relevant_job("주방 보조 구함") is False
+
+    def test_relevant_token_overrides_irrelevant(self):
+        """무관 토큰이 있어도 관련 토큰이 있으면 유지."""
+        assert is_relevant_job("빅데이터 기반 영업 분석") is True
+
+    def test_neutral_title_kept(self):
+        """관련·무관 토큰 모두 없으면 보수적으로 유지."""
+        assert is_relevant_job("플랫폼 개발자") is True
+
+    def test_empty_dropped(self):
+        assert is_relevant_job("") is False
 
 
 # ── wanted 파서 ───────────────────────────────────────────────────
@@ -166,6 +192,32 @@ class TestJobKoreaParsers:
     def test_deadline_always_open(self):
         assert _parse_deadline_jk("상시채용") is None
         assert _parse_deadline_jk(None) is None
+
+    def test_deadline_year_rollover_at_year_end(self, monkeypatch):
+        """연말에 본 다음 해 초 마감일은 내년으로 보정."""
+        import crawler.jobkorea as jk
+        from datetime import date as real_date
+
+        class FakeDate(real_date):
+            @classmethod
+            def today(cls):
+                return real_date(2026, 12, 20)
+
+        monkeypatch.setattr(jk, "date", FakeDate)
+        assert jk._parse_deadline_jk("01/15(목) 마감") == real_date(2027, 1, 15)
+
+    def test_deadline_no_rollover_for_near_future(self, monkeypatch):
+        """가까운 미래 마감일은 현재 연도 유지."""
+        import crawler.jobkorea as jk
+        from datetime import date as real_date
+
+        class FakeDate(real_date):
+            @classmethod
+            def today(cls):
+                return real_date(2026, 6, 1)
+
+        monkeypatch.setattr(jk, "date", FakeDate)
+        assert jk._parse_deadline_jk("06/30(화) 마감") == real_date(2026, 6, 30)
 
     def test_employment_normalization(self):
         assert _normalize_employment_jk("정규직") == "정규직"
