@@ -180,6 +180,33 @@ def run_crawler(source: str, max_pages: int) -> dict:
     return stats
 
 
+def run_all(max_pages: int = 8, sources: list[str] | None = None) -> dict:
+    """전체 크롤 파이프라인을 프로그램적으로 실행 (대시보드 '지금 갱신' 버튼용).
+
+    main()과 동일한 절차(소스별 크롤 → 마감 처리 → 링크 검증)를 수행하되
+    argparse 없이 호출 가능하고 합산 통계를 반환한다.
+    """
+    sources = sources or ["wanted", "saramin", "jobkorea"]
+    init_db()
+
+    totals = {"found": 0, "inserted": 0, "updated": 0,
+              "deactivated": 0, "errors": 0, "skipped_irrelevant": 0}
+    per_source = {}
+    for source in sources:
+        logger.info(f"=== {source.upper()} 크롤링 시작 ===")
+        stats = run_crawler(source, max_pages)
+        per_source[source] = stats
+        for k in totals:
+            totals[k] += stats.get(k, 0)
+
+    with get_conn() as conn:
+        n_deadline = deactivate_expired_jobs(conn)
+        link_stats = validate_job_links(conn, max_checks=60)
+
+    return {"totals": totals, "per_source": per_source,
+            "deadline_deactivated": n_deadline, "link_check": link_stats}
+
+
 def main():
     parser = argparse.ArgumentParser(description="JobSonar 크롤러")
     parser.add_argument(

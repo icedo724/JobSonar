@@ -1,26 +1,64 @@
----
-title: JobSonar
-emoji: 📡
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: false
----
-
 # JobSonar
 
-> 다양한 취업 플랫폼에 올라오는 데이터 관련 직군의 공고들을 모아서 보여주는 기능을 제공합니다.
+> 데이터 직군 채용공고를 한곳에 모아 보는 **개인용 로컬 대시보드**.
+> 원티드·사람인·잡코리아에서 데이터 엔지니어/분석가/사이언티스트/ML 엔지니어 공고를 수집해
+> 필터·트렌드·스킬·연봉·기업 관점으로 살펴본다.
 
-**[JobSonar](https://huggingface.co/spaces/mininiming/jobsonar)**
+> ⚠️ **로컬 전용 / 비공개 사용.** 수집 데이터를 외부에 공개·재배포하지 않는다.
+> 채용 플랫폼의 공고 데이터는 데이터베이스제작자 권리·약관 보호 대상이라,
+> 개인적 열람(사적이용) 범위로만 운용한다.
+
 ---
 
-## 주요 기능
+## 동작 방식 (로컬)
 
-| 탭 | 내용 |
-|----|------|
+```
+[지금 갱신] 버튼 클릭
+  ├─ 원티드 공개 REST API 수집
+  ├─ 사람인 HTML 파싱 (목록만, robots.txt 준수, 상세 미수집)
+  ├─ 잡코리아 HTML 파싱 (목록 + 상세)
+  ├─ 관련성 필터 (데이터 직군과 무관한 공고 제외)
+  ├─ 로컬 SQLite(data/jobsonar.db) upsert (회사명 정규화 기반 교차 플랫폼 중복 처리)
+  ├─ 만료 처리 (당일 미발견 + 마감일 초과 + 링크 HEAD 검증)
+  └─ 메모리 캐시 재로드 → 대시보드 즉시 반영
+```
+
+- 데이터는 **로컬 `data/jobsonar.db`에만** 저장된다 (외부 업로드·다운로드 없음).
+- 자동 스케줄 없음. 보고 싶을 때 대시보드의 **`지금 갱신`** 버튼으로 그 시점 데이터를 수집한다.
+
+---
+
+## 실행
+
+```bash
+pip install -r requirements.txt
+
+# 대시보드 실행 → http://localhost:8050
+python dashboard/app.py
+```
+
+대시보드 우측 상단 **`지금 갱신`** 버튼을 누르면 그 자리에서 크롤이 돌고(사이트당 수 페이지),
+완료되면 신규/업데이트 건수와 함께 목록·지표가 새로고침된다.
+
+> 갱신은 동기적으로 수행되어 1~2분가량 걸릴 수 있다(요청 간 1.5~4초 딜레이).
+> 수집량은 `dashboard/callbacks/refresh.py`의 `REFRESH_MAX_PAGES`로 조정한다.
+
+### CLI로 수집만 하기 (선택)
+
+```bash
+python -m crawler.run --source all --max-pages 8
+python -m crawler.run --source wanted --max-pages 3
+```
+
+---
+
+## 기능
+
+| 영역 | 내용 |
+|------|------|
 | 공고 목록 | 키워드·지역·경력·근무형태 필터, 원본 링크 |
 | 트렌드 | 주별 공고 수 추이, 스킬 트렌드, 경력 요건 분포 |
-| 기술 스택 | 직군별 TOP 스킬, 최근 2주 급상승 스킬 |
+| 기술 스택 | 직군별 TOP 스킬, 최근 급상승 스킬 |
 | 스킬 네트워크 | 공동 출현 기반 기술 연결 그래프 |
 | 연봉 분석 | 직군별 박스플롯·통계·히스토그램 |
 | 기업 분석 | 채용 TOP 기업, 지역별·직군×지역 히트맵 |
@@ -30,68 +68,25 @@ pinned: false
 ## 기술 스택
 
 - **수집**: Python, requests, BeautifulSoup
-- **저장**: SQLite
+- **저장**: SQLite (로컬)
 - **분석**: pandas, networkx
 - **시각화**: Plotly, Dash
-- **자동화**: GitHub Actions (매일 오전 10시 KST)
-- **배포**: Hugging Face Spaces (Docker)
 
 ---
 
-## 구조
-
-```
-GitHub Actions (매일 오전 10시)
-  ├─ 원티드 공개 REST API 수집
-  ├─ 사람인 HTML 파싱 (목록 페이지만, robots.txt 준수)
-  ├─ 잡코리아 HTML 파싱
-  ├─ 관련성 필터 (데이터 직군과 무관한 공고 제외)
-  ├─ 신규 공고 상세 보강 (원티드 API·잡코리아 상세 → 본문·스킬·지역·경력)
-  ├─ SQLite DB 업데이트 (upsert, 회사명 정규화 기반 교차 플랫폼 중복 처리)
-  ├─ 만료 처리 (당일 미발견 mark-and-sweep + 마감일 초과 + 링크 HEAD 검증)
-  └─ HF Dataset(mininiming/jobsonar-data)에 DB 업로드
-
-HF Space 앱 시작 시
-  ├─ HF Dataset에서 jobsonar.db 다운로드
-  └─ Dash 대시보드 렌더링 (상세 본문 펼치기·멀티플랫폼 배지·연봉/마감일 표기)
-```
-
----
-
-## 로컬
-
-```bash
-pip install -r requirements.txt
-
-# 크롤링 테스트 (원티드 3페이지)
-python -m crawler.run --source wanted --max-pages 3
-
-# 대시보드 실행
-python dashboard/app.py
-# → http://localhost:8050
-```
-
----
-
-## 수집 대상
-
-- 데이터 엔지니어
-- 데이터 분석가
-- 데이터 사이언티스트
-- ML 엔지니어
-
----
-
-## 플렛폼 별 정책
+## 플랫폼별 수집 정책
 
 | 사이트 | 방식 | 상세 보강 | robots.txt |
 |--------|------|-----------|-----------|
 | 원티드 | 공개 REST API | 공고 상세 API (본문·스킬 태그) | 문제 없음 |
-| 사람인 | 목록 페이지 HTML | 미수집 (정책 준수) | 상세 페이지 Disallow → relay URL 사용 |
+| 사람인 | 목록 페이지 HTML | 미수집 (정책 준수) | 상세 Disallow → relay URL 사용 |
 | 잡코리아 | 목록 페이지 HTML | 상세 페이지 (본문·스킬) | 허용 확인 |
 
-> 상세 보강은 **신규 공고에 한해** 수행해 요청 수를 제한하며, 실패해도 목록 수집 결과를 훼손하지 않습니다(best-effort).
-
-요청 간 1.5~4초 딜레이 적용.
+- 요청 간 1.5~4초 딜레이, 데이터 직군으로 대상 한정, 신규 공고에 한해 상세 보강(요청 수 제한).
+- 수집 결과는 **로컬 개인 열람 용도**로만 사용한다.
 
 ---
+
+## 수집 대상 직군
+
+데이터 엔지니어 · 데이터 분석가 · 데이터 사이언티스트 · ML 엔지니어

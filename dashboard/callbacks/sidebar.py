@@ -2,7 +2,7 @@
 from dash import Input, Output, html
 
 from analysis import new_jobs_count
-from dashboard.context import JOBS_DF
+from dashboard.context import get_jobs_df
 from dashboard.utils import apply_filter, kpi_card
 
 
@@ -14,9 +14,10 @@ def register(app) -> None:
         Input("filter-sources", "value"),
         Input("filter-industry", "value"),
         Input("filter-emp-type", "value"),
+        Input("data-version", "data"),
     )
-    def update_sidebar(categories, sources, industries, emp_types):
-        df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
+    def update_sidebar(categories, sources, industries, emp_types, _version):
+        df = apply_filter(get_jobs_df(), categories, sources, industries, emp_types)
         new7 = new_jobs_count(df, days=7)
         last = df["collected_at"].max().strftime("%Y-%m-%d") if not df.empty else "—"
         return [
@@ -37,9 +38,10 @@ def register(app) -> None:
         Input("filter-sources", "value"),
         Input("filter-industry", "value"),
         Input("filter-emp-type", "value"),
+        Input("data-version", "data"),
     )
-    def update_kpis(categories, sources, industries, emp_types):
-        df = apply_filter(JOBS_DF, categories, sources, industries, emp_types)
+    def update_kpis(categories, sources, industries, emp_types, _version):
+        df = apply_filter(get_jobs_df(), categories, sources, industries, emp_types)
 
         # 소스별 공고 수
         src_counts = {s: int((df["source_site"] == s).sum()) for s in ["wanted", "saramin", "jobkorea"]}

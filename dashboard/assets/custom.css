@@ -79,9 +79,26 @@ body {
     padding: 24px 28px;
     margin-bottom: 20px;
     color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
 }
 .header-banner h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.02em; }
 .header-banner p  { font-size: 0.88rem; opacity: 0.82; }
+
+/* ── 지금 갱신 버튼 ───────────────────────────────────────── */
+.refresh-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.refresh-btn {
+    background: #fff; color: #1352f1; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12); transition: opacity 0.15s;
+}
+.refresh-btn:hover  { opacity: 0.88; }
+.refresh-btn:active { transform: translateY(1px); }
+.refresh-status { min-height: 16px; font-size: 0.76rem; }
+.refresh-status .refresh-ok  { color: #d6ffe9; }
+.refresh-status .refresh-err { color: #ffd6d6; }
 
 /* ── KPI Row ──────────────────────────────────────────────── */
 .kpi-row {

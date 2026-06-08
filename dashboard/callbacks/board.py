@@ -4,7 +4,7 @@ import pandas as pd
 from dash import Input, Output, State, html, ctx
 
 from analysis import normalize_location
-from dashboard.context import BOARD_DF
+from dashboard.context import get_board_df
 from dashboard.utils import apply_filter, source_badge, exp_label, salary_label, deadline_label
 
 
@@ -16,9 +16,10 @@ def register(app) -> None:
         Input("filter-sources", "value"),
         Input("filter-industry", "value"),
         Input("filter-emp-type", "value"),
+        Input("data-version", "data"),
     )
-    def update_location_options(categories, sources, industries, emp_types):
-        df = apply_filter(BOARD_DF, categories, sources, industries, emp_types)
+    def update_location_options(categories, sources, industries, emp_types, _version):
+        df = apply_filter(get_board_df(), categories, sources, industries, emp_types)
         locs = sorted({normalize_location(l) for l in df["location"].dropna()} - {""})
         return [{"label": l, "value": l} for l in locs]
 
@@ -63,14 +64,15 @@ def register(app) -> None:
         Input("board-exp", "value"),
         Input("board-sort", "value"),
         Input("board-page", "data"),
+        Input("data-version", "data"),
     )
     def update_board(categories, sources, industries, emp_types,
-                     keyword, locations, exps, sort, page):
+                     keyword, locations, exps, sort, page, _version):
         PAGE_SIZE = 20
         if not categories or not sources:
             return [html.P("필터를 선택해 주세요.", className="no-data")], "총 0건", "1 / 1", True, True
 
-        df = apply_filter(BOARD_DF, categories, sources, industries, emp_types)
+        df = apply_filter(get_board_df(), categories, sources, industries, emp_types)
 
         # 키워드 검색
         if keyword:
